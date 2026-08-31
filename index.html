@@ -987,7 +987,18 @@
                 <h3 class="font-bold text-slate-800 text-base">管理者パスコード認証</h3>
                 <p class="text-xs text-slate-500">管理者用パスコードを入力してください</p>
 
-                <input type="password" v-model="adminPasscode" @keyup.enter="verifyAdminPasscode" placeholder="パスコードを入力" class="w-full text-center text-lg tracking-widest font-mono bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-indigo-500">
+                <input type="password" 
+                       v-model="adminPasscode" 
+                       @keyup.enter="verifyAdminPasscode" 
+                       placeholder="パスコードを入力" 
+                       autocomplete="new-password"
+                       autocorrect="off"
+                       autocapitalize="off"
+                       spellcheck="false"
+                       inputmode="numeric"
+                       name="admin_passcode_custom"
+                       id="admin_passcode_input"
+                       class="w-full text-center text-lg tracking-widest font-mono bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-indigo-500">
 
                 <div class="flex space-x-2 pt-2">
                     <button @click="showAdminAuthModal = false" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl">キャンセル</button>
@@ -1522,6 +1533,7 @@
                 const pendingModalToOpen = ref(null);
 
                 const openAdminAuthModal = () => {
+                    adminPasscode.value = '';
                     showAdminAuthModal.value = true;
                 };
 
