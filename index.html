@@ -2084,35 +2084,50 @@
                 const calculateDefaultMonth = (staff) => {
                     if (!staff) return 1;
 
-                    let elapsedDays = 0;
-                    if (staff.startDate) {
-                        const start = new Date(staff.startDate);
-                        const today = new Date();
-                        const diffTime = today - start;
-                        if (!isNaN(diffTime)) {
-                            elapsedDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                        }
-                    }
+                    const todayStr = getTodayStr();
+                    const dates = staff.interviewDates || {};
 
                     const unachieved1 = getUnachievedItemsForMonth(1);
                     const unachieved2 = getUnachievedItemsForMonth(2);
                     const unachieved3 = getUnachievedItemsForMonth(3);
                     const totalUnachieved = unachieved1.length + unachieved2.length + unachieved3.length;
 
-                    // 1. 3ヶ月目が完了または入社90日以上経過の場合
-                    if (isMonthFullyAchieved(3) || (isMonthFullyAchieved(1) && isMonthFullyAchieved(2) && elapsedDays >= 90)) {
-                        if (totalUnachieved > 0) return 4; // 未達成があれば4ヶ月目（延長）
+                    // 1. 面談予定日（画像の日付）を過ぎているかに基づく優先判定
+                    // 3ヶ月総括面談日を過ぎたら → 未達成があれば4ヶ月目(延長)、なければ3ヶ月目
+                    if (dates.m3 && todayStr > dates.m3) {
+                        return totalUnachieved > 0 ? 4 : 3;
+                    }
+                    // 2ヶ月面談日を過ぎたら → 3ヶ月目を表示
+                    if (dates.m2 && todayStr > dates.m2) {
                         return 3;
                     }
-
-                    // 2. 2ヶ月目が完了または入社60日以上経過の場合
-                    if (isMonthFullyAchieved(2) || (isMonthFullyAchieved(1) && elapsedDays >= 60)) {
-                        return 3;
-                    }
-
-                    // 3. 1ヶ月目が完了または入社30日以上経過の場合
-                    if (isMonthFullyAchieved(1) || elapsedDays >= 30) {
+                    // 1ヶ月面談日を過ぎたら → 2ヶ月目を表示
+                    if (dates.m1 && todayStr > dates.m1) {
                         return 2;
+                    }
+
+                    // 2. 指導OKチェック完了状況による判定（前月が完了していれば次月を表示）
+                    if (isMonthFullyAchieved(3)) {
+                        return totalUnachieved > 0 ? 4 : 3;
+                    }
+                    if (isMonthFullyAchieved(2)) {
+                        return 3;
+                    }
+                    if (isMonthFullyAchieved(1)) {
+                        return 2;
+                    }
+
+                    // 3. 面談日未設定時のフォールバック（入社日からの経過日数）
+                    if (staff.startDate) {
+                        const start = new Date(staff.startDate);
+                        const today = new Date();
+                        const diffTime = today - start;
+                        if (!isNaN(diffTime)) {
+                            const elapsedDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                            if (elapsedDays >= 90) return totalUnachieved > 0 ? 4 : 3;
+                            if (elapsedDays >= 60) return 3;
+                            if (elapsedDays >= 30) return 2;
+                        }
                     }
 
                     return 1;
