@@ -242,43 +242,52 @@
                         </div>
 
                         <!-- 現在の重点課題（編集可能エリア） -->
-                        <div class="bg-white/90 p-3.5 rounded-xl border border-amber-200/90 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2.5">
-                            <div class="flex items-start space-x-2.5 flex-1">
-                                <i class="fa-solid fa-crosshairs text-amber-600 mt-0.5 text-base shrink-0"></i>
-                                <div class="flex-1">
-                                    <div class="flex items-center justify-between">
-                                        <span class="font-bold text-amber-950 flex items-center">
+                        <div class="bg-white/90 p-4 sm:p-5 rounded-2xl border border-amber-200/90 shadow-2xs flex flex-col md:flex-row md:items-start justify-between gap-3">
+                            <div class="flex items-start space-x-3 flex-1 w-full">
+                                <div class="bg-amber-100 text-amber-700 p-2 rounded-xl shrink-0 mt-0.5">
+                                    <i class="fa-solid fa-crosshairs text-base"></i>
+                                </div>
+                                <div class="flex-1 w-full">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="font-extrabold text-amber-950 text-sm sm:text-base flex items-center">
                                             {{ t('focusTopicTitle') }}
                                         </span>
                                         <button v-if="isAdmin && !isEditingFocusTopic" @click="startEditFocusTopic" 
-                                                class="text-xs text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 font-bold transition flex items-center shadow-2xs">
-                                            <i class="fa-solid fa-pen-to-square mr-1 text-indigo-600"></i> 重点課題を編集
+                                                class="text-xs text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200 font-bold transition flex items-center shadow-2xs">
+                                            <i class="fa-solid fa-pen-to-square mr-1.5 text-indigo-600"></i> 重点課題を編集
                                         </button>
                                     </div>
                                     
-                                    <!-- 表示モード -->
-                                    <div v-if="!isEditingFocusTopic" class="mt-1.5">
-                                        <div v-if="currentFocusTopic" class="bg-amber-50/90 text-amber-950 border border-amber-200 px-4 py-3 rounded-xl text-xs md:text-sm font-bold leading-relaxed whitespace-pre-wrap min-h-[4.5rem] flex items-center">
+                                    <!-- 表示モード（ゆったりとした高さ＆確実な改行反映） -->
+                                    <div v-if="!isEditingFocusTopic" class="mt-2">
+                                        <div v-if="currentFocusTopic" 
+                                             style="white-space: pre-wrap; word-break: break-word;"
+                                             class="bg-amber-50/90 text-amber-950 border border-amber-200/90 p-4 sm:p-5 rounded-2xl text-xs sm:text-sm font-bold leading-relaxed shadow-inner min-h-[6rem]">
                                             {{ currentFocusTopic }}
                                         </div>
-                                        <div v-else class="text-slate-400 text-xs italic py-2 min-h-[4.5rem] flex items-center">
+                                        <div v-else class="text-slate-400 text-xs italic p-4 min-h-[5rem] flex items-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
                                             <span v-if="isAdmin">（未設定：右上の「重点課題を編集」ボタンまたは管理者画面から設定できます）</span>
                                             <span v-else>（未設定）</span>
                                         </div>
                                     </div>
 
-                                    <!-- 編集モード -->
-                                    <div v-else class="mt-2 space-y-2">
-                                        <textarea v-model="tempFocusTopic" rows="3" 
-                                                  placeholder="今月の個別目標や強化テーマを入力（3行程度入力可能）" 
-                                                  class="w-full text-xs md:text-sm bg-white border border-indigo-300 rounded-xl p-3 font-bold leading-relaxed focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
-                                        <div class="flex space-x-2 justify-end">
-                                            <button @click="isEditingFocusTopic = false" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-xl transition">
-                                                キャンセル
-                                            </button>
-                                            <button @click="saveFocusTopic" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-4 py-1.5 rounded-xl shadow-xs transition">
-                                                <i class="fa-solid fa-check mr-1"></i> 保存する
-                                            </button>
+                                    <!-- 編集モード（広々とした複数行入力エリア） -->
+                                    <div v-else class="mt-2 space-y-2.5">
+                                        <textarea v-model="tempFocusTopic" 
+                                                  rows="5" 
+                                                  placeholder="今月の個別目標や強化テーマを入力（Enterキーで改行できます）" 
+                                                  style="white-space: pre-wrap;"
+                                                  class="w-full text-xs sm:text-sm bg-white border-2 border-indigo-400 rounded-2xl p-4 font-bold leading-relaxed focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 min-h-[8rem] shadow-inner"></textarea>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[11px] text-slate-500 font-medium">※ Enterキーで改行・複数行入力が可能です</span>
+                                            <div class="flex space-x-2">
+                                                <button @click="isEditingFocusTopic = false" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs px-4 py-2 rounded-xl transition">
+                                                    キャンセル
+                                                </button>
+                                                <button @click="saveFocusTopic" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-xs transition flex items-center">
+                                                    <i class="fa-solid fa-check mr-1.5"></i> 保存する
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -648,20 +657,21 @@
                             </div>
 
                             <!-- Focus Topic Direct Editor in Admin Dashboard -->
-                            <div class="bg-amber-50/80 p-3.5 rounded-xl border border-amber-200/90 space-y-2 text-xs">
+                            <div class="bg-amber-50/80 p-4 sm:p-5 rounded-2xl border border-amber-200/90 space-y-2 text-xs">
                                 <label class="font-bold text-amber-950 flex items-center justify-between">
-                                    <span class="flex items-center">
-                                        <i class="fa-solid fa-crosshairs text-amber-600 mr-1.5 text-sm"></i>
+                                    <span class="flex items-center text-sm font-extrabold">
+                                        <i class="fa-solid fa-crosshairs text-amber-600 mr-1.5 text-base"></i>
                                         {{ activeMonth }}ヶ月目の重点課題（強化テーマ・個別目標）:
                                     </span>
-                                    <span class="text-[10px] text-amber-800 font-normal">※管理者専用設定</span>
+                                    <span class="text-[11px] text-amber-800 font-medium">※ Enterキーで改行可能（自動保存）</span>
                                 </label>
                                 <div class="flex gap-2">
                                     <textarea :value="currentFocusTopic" 
                                               @input="updateFocusTopicForActiveMonth($event.target.value)" 
-                                              rows="3"
-                                              placeholder="今月重点的に指導・習得する課題を入力（複数行入力可能）" 
-                                              class="w-full bg-white border border-amber-300 rounded-xl px-3.5 py-2.5 font-bold text-xs md:text-sm text-slate-800 focus:ring-2 focus:ring-amber-500 shadow-2xs leading-relaxed"></textarea>
+                                              rows="5"
+                                              style="white-space: pre-wrap;"
+                                              placeholder="今月重点的に指導・習得する課題を入力（Enterキーで改行できます）" 
+                                              class="w-full bg-white border-2 border-amber-300 rounded-2xl p-4 font-bold text-xs md:text-sm text-slate-800 focus:ring-2 focus:ring-amber-500 shadow-inner leading-relaxed min-h-[7rem]"></textarea>
                                 </div>
                             </div>
 
