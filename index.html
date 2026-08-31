@@ -1,0 +1,2473 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>有料老人ホームくすの木 新人教育進捗管理システム</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Noto Sans JP Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+        [v-cloak] { display: none; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 antialiased selection:bg-emerald-200">
+
+    <div id="app" v-cloak class="min-h-screen flex flex-col">
+
+        <!-- Header Bar -->
+        <header class="bg-emerald-800 text-white shadow-md sticky top-0 z-30">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-emerald-700 p-2.5 rounded-xl text-emerald-100 shadow-inner">
+                        <i class="fa-solid font-bold text-2xl fa-user-nurse"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2.5 flex-wrap">
+                            <h1 class="font-bold text-lg md:text-xl leading-tight tracking-wide">{{ t('appTitle') }}</h1>
+                            <span class="bg-emerald-950/80 text-amber-300 font-bold px-3 py-0.5 rounded-full text-xs border border-emerald-600/80 flex items-center shadow-inner">
+                                <i class="fa-regular fa-calendar-days mr-1.5 text-amber-400"></i>{{ formattedToday }}
+                            </span>
+                        </div>
+                        <p class="text-xs text-emerald-200 mt-0.5">{{ t('appSubTitle') }}</p>
+                    </div>
+                </div>
+
+                <!-- Global Action Header Buttons -->
+                <!-- General Staff Simple View (Only Language Toggle, Workflow & Admin Login) -->
+                <div v-if="!isAdmin" class="flex items-center space-x-2 flex-wrap gap-y-1">
+                    <!-- Language Toggle Button -->
+                    <button @click="toggleLanguage" 
+                            class="bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-900 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center shadow-md border border-amber-300">
+                        <i class="fa-solid fa-language text-base mr-1.5 text-slate-900"></i> {{ t('langToggleBtn') }}
+                    </button>
+
+                    <button @click="showWorkflowModal = true" 
+                            class="bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center shadow-sm">
+                        <i class="fa-solid fa-clipboard-list mr-1.5 text-amber-300"></i> {{ t('workflowBtn') }}
+                    </button>
+
+                    <button @click="openAdminAuthModal" 
+                            class="bg-slate-700 hover:bg-slate-600 active:scale-95 text-slate-100 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center shadow-sm">
+                        <i class="fa-solid fa-user-shield mr-2 text-amber-300"></i> {{ t('adminLoginBtn') }}
+                    </button>
+                </div>
+
+                <!-- Admin Mode Dedicated Toolbar (Visible only when logged in as Admin) -->
+                <div v-else class="flex items-center space-x-2 flex-wrap gap-y-1">
+                    <!-- Language Toggle Button in Admin Mode -->
+                    <button @click="toggleLanguage" 
+                            class="bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-900 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition flex items-center shadow-md border border-amber-300">
+                        <i class="fa-solid fa-language text-base mr-1.5 text-slate-900"></i> {{ t('langToggleBtn') }}
+                    </button>
+
+                    <!-- Save status badge & Manual Sync -->
+                    <div class="flex items-center bg-emerald-900/70 px-3 py-1.5 rounded-xl border border-emerald-600/80 text-xs text-emerald-100 space-x-2">
+                        <span v-if="saveStatus === 'saved'" class="flex items-center text-emerald-300 font-medium">
+                            <i class="fa-solid fa-cloud-check mr-1.5 text-emerald-400 text-sm"></i> 自動保存済み
+                        </span>
+                        <span v-else-if="saveStatus === 'saving'" class="flex items-center text-amber-300 font-medium">
+                            <i class="fa-solid fa-spinner fa-spin mr-1.5 text-amber-300 text-sm"></i> 保存中
+                        </span>
+                        <span v-else-if="saveStatus === 'unsaved'" class="flex items-center text-amber-300 font-medium">
+                            <i class="fa-solid fa-cloud mr-1.5 text-amber-300 text-sm"></i> 未保存
+                        </span>
+                        <span v-else class="flex items-center text-rose-300 font-medium">
+                            <i class="fa-solid fa-triangle-exclamation mr-1.5 text-rose-400 text-sm"></i> 保存失敗
+                        </span>
+                        <button @click="saveDataToGAS(true)" :disabled="isSaving" class="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-2.5 py-1 rounded-lg text-xs font-bold transition shadow-xs flex items-center">
+                            <i class="fa-solid fa-floppy-disk mr-1"></i> 手動保存
+                        </button>
+                    </div>
+
+                    <button @click="showInstructorScheduleModal = true" 
+                            class="bg-indigo-700 hover:bg-indigo-600 active:scale-95 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center shadow-sm border border-indigo-400/50">
+                        <i class="fa-regular fa-calendar-check text-amber-300 mr-1.5 text-base"></i> 指導担当スケジュール
+                    </button>
+
+                    <button @click="showConfigModal = true" 
+                            class="bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center shadow-sm"
+                            title="GAS・データ保存設定">
+                        <i class="fa-solid fa-gear text-amber-300 mr-1.5"></i> 設定
+                    </button>
+
+                    <button @click="showWorkflowModal = true" 
+                            class="bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center shadow-sm">
+                        <i class="fa-solid fa-clipboard-list mr-1.5 text-amber-300"></i> {{ t('workflowBtn') }}
+                    </button>
+
+                    <button @click="isAdmin = false" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center shadow-sm">
+                        <i class="fa-solid fa-right-from-bracket mr-1.5"></i> {{ t('adminLogoutBtn') }}
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main v-if="!isAdmin" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+            <!-- Target Staff Selector Bar Card -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 transition hover:shadow-md">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    
+                    <!-- Staff Dropdown (Name Only) -->
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <label class="text-sm font-bold text-slate-700 whitespace-nowrap flex items-center">
+                            <i class="fa-solid fa-user-check text-emerald-600 mr-2"></i>{{ t('targetStaffLabel') }}
+                        </label>
+                        <select v-model="selectedStaffId" class="bg-slate-50 border border-slate-300 text-slate-900 font-bold text-base rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 block p-2.5 min-w-[220px]">
+                            <option v-for="staff in staffList" :key="staff.id" :value="staff.id">
+                                {{ staff.name }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Selected Staff Metadata Badges & Date Estimation -->
+                    <div v-if="currentStaff" class="flex flex-wrap items-center gap-2">
+                        <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            {{ currentStaff.role }}
+                        </span>
+                        <span class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                            {{ currentStaff.courseName }}
+                        </span>
+                        <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            <i class="fa-regular fa-clock mr-1"></i>{{ currentStaff.workType }}
+                        </span>
+                        <span class="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                            入社: {{ currentStaff.startDate }}
+                        </span>
+
+                        <!-- Predictive Completion Date Badge -->
+                        <div class="bg-emerald-50 text-emerald-900 border border-emerald-300 px-3 py-1 rounded-full text-xs font-bold flex items-center">
+                            <i class="fa-solid fa-flag-checkered text-emerald-600 mr-1.5"></i>
+                            {{ t('estimatedCompletion') }} {{ estimatedCompletionDate }}
+                        </div>
+
+                        <!-- Compact Today's Instructor Badge (View / Edit Mode) -->
+                        <div v-if="!isEditingTodayInstructor" class="bg-indigo-50/90 text-indigo-950 border border-indigo-200 px-3 py-1 rounded-full text-xs font-bold flex items-center space-x-1.5 shadow-2xs">
+                            <i class="fa-solid fa-user-ninja text-indigo-600"></i>
+                            <span>{{ t('instructorToday') }}</span>
+                            <span class="text-indigo-900 font-extrabold text-xs sm:text-sm ml-0.5">{{ getTodayInstructorName() || t('notSet') }}</span>
+                            <button @click="isEditingTodayInstructor = true" 
+                                    class="text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-300 text-[11px] font-bold transition flex items-center ml-1 shadow-2xs">
+                                <i class="fa-solid fa-pen-to-square mr-1"></i>{{ t('edit') }}
+                            </button>
+                        </div>
+
+                        <div v-else class="bg-indigo-50/90 text-indigo-950 border border-indigo-300 px-3 py-1 rounded-full text-xs font-bold flex items-center space-x-1.5 shadow-2xs">
+                            <i class="fa-solid fa-user-ninja text-indigo-600"></i>
+                            <span>{{ t('instructorToday') }}</span>
+                            <input type="text" 
+                                   :value="getTodayInstructorName()" 
+                                   @input="setTodayInstructorName($event.target.value)" 
+                                   @keyup.enter="isEditingTodayInstructor = false"
+                                   placeholder="名前を入力" 
+                                   class="w-28 bg-white border border-indigo-400 rounded-lg px-2 py-0.5 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500">
+                            <button @click="isEditingTodayInstructor = false" 
+                                    class="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-0.5 rounded-md text-[11px] font-bold shadow-2xs transition">
+                                {{ t('complete') }}
+                            </button>
+                        </div>
+
+                        <button v-if="isAdmin" @click="openStaffModal(currentStaff)" class="text-xs text-indigo-600 hover:text-indigo-800 font-bold underline ml-1">
+                            [設定・編集]
+                        </button>
+                    </div>
+
+                    <!-- Admin Add Staff & Schedule Buttons -->
+                    <div v-if="isAdmin" class="flex items-center space-x-2 flex-wrap gap-y-1">
+                        <button @click="openInstructorScheduleModal" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center">
+                            <i class="fa-regular fa-calendar-alt mr-1.5"></i> 📅 指導担当スケジュール設定
+                        </button>
+                        <button @click="openStaffModal(null)" class="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center">
+                            <i class="fa-solid fa-user-plus mr-1"></i> ＋ 新人スタッフ追加
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="currentStaff" class="space-y-6">
+
+                <!-- Roadmap Month Navigation Tabs -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="border-b border-slate-200 bg-slate-50 flex overflow-x-auto">
+                        <button v-for="m in availableMonths" :key="m"
+                                @click="activeMonth = m"
+                                :class="['px-6 py-4 font-bold text-sm whitespace-nowrap transition flex items-center space-x-2 border-b-2',
+                                         activeMonth === m ? (m === 4 ? 'border-amber-500 text-amber-900 bg-amber-50/50 shadow-xs' : 'border-emerald-600 text-emerald-800 bg-white shadow-xs') : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100']">
+                            <span class="w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold"
+                                  :class="activeMonth === m ? (m === 4 ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white') : (m === 4 ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600')">
+                                {{ m }}
+                            </span>
+                            <span>{{ m === 4 ? getMonthTitle(4) : m + t('month') + ': ' + getMonthTitle(m) }}</span>
+                        </button>
+                    </div>
+
+                    <!-- Month Target & Focus Topic Banner -->
+                    <div class="p-4 bg-emerald-50/60 border-b border-emerald-100 space-y-3 text-xs md:text-sm">
+                        <!-- 月間目標 & 面談時期/予定日 -->
+                        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                            <div class="flex items-start space-x-2">
+                                <i class="fa-solid fa-bullseye text-emerald-600 mt-0.5 text-base"></i>
+                                <div>
+                                    <span class="font-bold text-emerald-900">{{ t('monthGoal') }}</span>
+                                    <span class="text-slate-700 ml-1.5 font-medium">{{ getMonthGoal(activeMonth) }}</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-2 flex-wrap shrink-0">
+                                <div class="bg-white px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-800 flex items-center font-bold shadow-2xs">
+                                    <i class="fa-regular fa-comments text-amber-500 mr-2"></i>
+                                    <span>{{ t('interviewTiming') }} {{ getInterviewTiming(activeMonth) }}</span>
+                                </div>
+                                <div class="bg-amber-100 text-amber-900 px-3 py-1.5 rounded-xl border border-amber-200 font-bold shadow-2xs">
+                                    <i class="fa-regular fa-calendar-check mr-1.5 text-amber-600"></i>
+                                    {{ t('interviewDate') }} {{ getCurrentMonthInterviewDate(activeMonth) }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 現在の重点課題（編集可能エリア） -->
+                        <div class="bg-white/90 p-3.5 rounded-xl border border-amber-200/90 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+                            <div class="flex items-start space-x-2.5 flex-1">
+                                <i class="fa-solid fa-crosshairs text-amber-600 mt-0.5 text-base shrink-0"></i>
+                                <div class="flex-1">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-bold text-amber-950 flex items-center">
+                                            {{ t('focusTopicTitle') }}
+                                        </span>
+                                        <button v-if="isAdmin && !isEditingFocusTopic" @click="startEditFocusTopic" 
+                                                class="text-xs text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 font-bold transition flex items-center shadow-2xs">
+                                            <i class="fa-solid fa-pen-to-square mr-1 text-indigo-600"></i> 重点課題を編集
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- 表示モード -->
+                                    <div v-if="!isEditingFocusTopic" class="mt-1.5">
+                                        <div v-if="currentFocusTopic" class="bg-amber-50/90 text-amber-950 border border-amber-200 px-4 py-3 rounded-xl text-xs md:text-sm font-bold leading-relaxed whitespace-pre-wrap min-h-[4.5rem] flex items-center">
+                                            {{ currentFocusTopic }}
+                                        </div>
+                                        <div v-else class="text-slate-400 text-xs italic py-2 min-h-[4.5rem] flex items-center">
+                                            <span v-if="isAdmin">（未設定：右上の「重点課題を編集」ボタンまたは管理者画面から設定できます）</span>
+                                            <span v-else>（未設定）</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- 編集モード -->
+                                    <div v-else class="mt-2 space-y-2">
+                                        <textarea v-model="tempFocusTopic" rows="3" 
+                                                  placeholder="今月の個別目標や強化テーマを入力（3行程度入力可能）" 
+                                                  class="w-full text-xs md:text-sm bg-white border border-indigo-300 rounded-xl p-3 font-bold leading-relaxed focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                                        <div class="flex space-x-2 justify-end">
+                                            <button @click="isEditingFocusTopic = false" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-xl transition">
+                                                キャンセル
+                                            </button>
+                                            <button @click="saveFocusTopic" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-4 py-1.5 rounded-xl shadow-xs transition">
+                                                <i class="fa-solid fa-check mr-1"></i> 保存する
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar Header Card -->
+                    <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/80 border-b border-slate-200">
+                        <div>
+                            <div class="flex justify-between text-xs font-bold mb-1.5">
+                                <span class="text-slate-700"><i class="fa-solid fa-user-check text-blue-500 mr-1"></i>{{ t('staffProgress') }}</span>
+                                <span class="text-blue-600 font-mono text-sm">{{ calculateProgress('staff') }}%</span>
+                            </div>
+                            <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
+                                <div class="bg-blue-500 h-3 rounded-full transition-all duration-500" :style="{ width: calculateProgress('staff') + '%' }"></div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between text-xs font-bold mb-1.5">
+                                <span class="text-slate-700"><i class="fa-solid fa-user-shield text-emerald-600 mr-1"></i>{{ t('trainerProgress') }}</span>
+                                <span class="text-emerald-600 font-mono text-sm">{{ calculateProgress('trainer') }}%</span>
+                            </div>
+                            <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
+                                <div class="bg-emerald-600 h-3 rounded-full transition-all duration-500" :style="{ width: calculateProgress('trainer') + '%' }"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Curriculum Items Checklist Stream -->
+                    <div class="divide-y divide-slate-100">
+                        <div v-for="item in currentMonthItems" :key="item.id" 
+                             class="p-4 hover:bg-slate-50/80 transition flex flex-col space-y-3"
+                             :class="{ 'bg-amber-50/40': item.needsReview || item.isCustom }">
+                            
+                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <!-- Left: Description & Badges -->
+                                <div class="flex-1 space-y-1">
+                                    <div class="flex items-center space-x-2 flex-wrap">
+                                        <span v-if="item.isCustom" class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-300">
+                                            <i class="fa-solid fa-square-plus text-indigo-600 mr-1"></i>{{ t('customItemBadge') }}
+                                        </span>
+                                        <span v-if="item.isNight" class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">{{ t('isNight') }}</span>
+                                        <span v-if="isItemExempt(item)" class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 text-slate-600">
+                                            {{ currentStaff.workType === 'パート（日勤のみ）' ? t('exemptDay') : t('exemptNight') }}
+                                        </span>
+                                        <span v-if="item.carriedOverFrom" class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                            <i class="fa-solid fa-clock-rotate-left text-amber-600 mr-1"></i>{{ item.carriedOverFrom }}{{ t('carriedOverBadge') }}
+                                        </span>
+                                        <span v-if="item.needsReview" class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500 text-white shadow-2xs">{{ t('needsReview') }}</span>
+                                        <h3 class="font-bold text-slate-800 text-sm md:text-base">{{ getItemTitle(item) }}</h3>
+                                    </div>
+                                    <p class="text-xs text-slate-600 leading-relaxed">{{ getItemDesc(item) }}</p>
+                                </div>
+
+                                <!-- Right: Controls & Checkboxes -->
+                                <div class="flex items-center space-x-2 sm:space-x-2.5 shrink-0 self-end md:self-center flex-wrap gap-y-1.5">
+                                    <!-- Guide Modal Trigger -->
+                                    <button @click="openGuideModal(item)" 
+                                            class="text-xs text-emerald-800 bg-emerald-50 hover:bg-emerald-100 active:scale-95 px-2.5 py-1.5 rounded-xl border border-emerald-200 font-bold transition flex items-center shadow-2xs">
+                                        <i class="fa-solid fa-circle-info mr-1 text-emerald-600"></i> {{ t('guidePointBtn') }}
+                                    </button>
+
+                                    <!-- Staff Checkbox -->
+                                    <label :class="['flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition select-none shadow-2xs',
+                                                   getCheckState(item.id, 'staff') ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50']">
+                                        <input type="checkbox" :checked="getCheckState(item.id, 'staff')" @change="toggleCheck(item.id, 'staff')" class="rounded text-blue-600 focus:ring-blue-500 w-4 h-4">
+                                        <span>{{ t('staffOk') }}</span>
+                                    </label>
+
+                                    <!-- Trainer Checkbox -->
+                                    <label :class="['flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition select-none shadow-2xs',
+                                                   getCheckState(item.id, 'trainer') ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50']">
+                                        <input type="checkbox" :checked="getCheckState(item.id, 'trainer')" @change="toggleCheck(item.id, 'trainer')" class="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4">
+                                        <span>{{ t('trainerOk') }}</span>
+                                    </label>
+
+                                    <!-- Admin Flag Toggle Button -->
+                                    <button v-if="isAdmin" @click="toggleNeedsReview(item)" 
+                                            :title="item.needsReview ? '再指導フラグを解除' : '要再指導として設定'"
+                                            :class="['p-1.5 rounded-lg text-xs transition', item.needsReview ? 'text-amber-600 bg-amber-100' : 'text-slate-300 hover:text-amber-500']">
+                                        <i class="fa-solid fa-flag text-sm"></i>
+                                    </button>
+
+                                    <!-- Custom Item Delete Button -->
+                                    <button v-if="item.isCustom" @click="deleteCustomItem(item.id)" 
+                                            title="この追加項目を削除" 
+                                            class="p-1.5 rounded-lg text-xs text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition">
+                                        <i class="fa-solid fa-trash-can text-sm"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Item Unachieved Note Section (Admin Edit Mode / General User View Only) -->
+                            <div v-if="isAdmin" class="pt-1 flex flex-col sm:flex-row sm:items-center gap-2 bg-slate-50/90 p-2.5 rounded-xl border border-slate-200/90">
+                                <label class="text-xs font-bold text-slate-700 whitespace-nowrap flex items-center shrink-0">
+                                    <i class="fa-regular fa-comment-dots text-amber-600 mr-1.5"></i>{{ t('unachievedNote') }} (管理者編集):
+                                </label>
+                                <input type="text" 
+                                       :value="getItemNote(item.id)" 
+                                       @input="updateItemNote(item.id, $event.target.value)" 
+                                       placeholder="" 
+                                       class="flex-1 text-xs bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-medium focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-slate-800">
+                            </div>
+
+                            <div v-else-if="getItemNote(item.id)" class="pt-1 flex items-start space-x-2 bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/80 text-xs">
+                                <i class="fa-regular fa-comment-dots text-amber-600 mt-0.5 shrink-0"></i>
+                                <div class="leading-relaxed">
+                                    <strong class="font-bold text-amber-950 mr-1">{{ t('unachievedNote') }}</strong>
+                                    <span class="text-slate-800 font-medium">{{ getItemNote(item.id) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 本日の振り返りエリア：新人スタッフ入力と指導者入力の2つに分割 -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+                    <div class="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <h2 class="font-bold text-slate-800 text-base flex items-center">
+                            <i class="fa-solid fa-pen-to-square text-emerald-600 mr-2"></i> {{ t('reflectionSectionTitle') }}
+                        </h2>
+                        <span class="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                            <i class="fa-solid fa-cloud-arrow-up mr-1 text-emerald-600"></i>{{ t('autoSavedBadge') }}
+                        </span>
+                    </div>
+
+                    <!-- 2 Column Input Form: スタッフ入力 / 指導者入力 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        <!-- 1. 新人スタッフ入力カード -->
+                        <div class="bg-blue-50/40 rounded-2xl p-5 border border-blue-200/80 space-y-3">
+                            <div class="flex items-center space-x-2 border-b border-blue-100 pb-2">
+                                <div class="bg-blue-600 text-white p-1.5 rounded-lg text-xs font-bold">
+                                    <i class="fa-solid fa-user-pen"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-slate-800 text-xs sm:text-sm">{{ t('rookieCardTitle') }}</h3>
+                                    <p class="text-[11px] text-slate-500">{{ t('rookieCardSub') }}</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <textarea v-model="rookieCommentInput" rows="3" 
+                                          :placeholder="t('rookieCommentPlaceholder')" 
+                                          class="w-full text-xs bg-white border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"></textarea>
+                            </div>
+
+                            <button @click="submitRookieComment" 
+                                    class="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition flex items-center justify-center">
+                                <i class="fa-solid fa-paper-plane mr-1.5"></i> {{ t('rookieSubmitBtn') }}
+                            </button>
+                        </div>
+
+                        <!-- 2. 指導者入力カード -->
+                        <div class="bg-emerald-50/40 rounded-2xl p-5 border border-emerald-200/80 space-y-3">
+                            <div class="flex items-center space-x-2 border-b border-emerald-100 pb-2">
+                                <div class="bg-emerald-700 text-white p-1.5 rounded-lg text-xs font-bold">
+                                    <i class="fa-solid fa-chalkboard-user"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-slate-800 text-xs sm:text-sm">{{ t('trainerCardTitle') }}</h3>
+                                    <p class="text-[11px] text-slate-500">{{ t('trainerCardSub') }}</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <textarea v-model="trainerCommentInput" rows="3" 
+                                          :placeholder="t('trainerCommentPlaceholder')" 
+                                          class="w-full text-xs bg-white border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-medium"></textarea>
+                            </div>
+
+                            <button @click="submitTrainerComment" 
+                                    class="w-full bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition flex items-center justify-center">
+                                <i class="fa-solid fa-paper-plane mr-1.5"></i> {{ t('trainerSubmitBtn') }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-amber-50/70 rounded-xl p-3 border border-amber-200 text-xs text-amber-900 flex items-center space-x-2">
+                        <i class="fa-solid fa-shield-halved text-amber-600 text-base shrink-0"></i>
+                        <span>{{ t('privacyNotice') }}</span>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- Admin Dedicated Page View -->
+        <main v-if="isAdmin" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+            <!-- Header Banner for Admin -->
+            <div class="bg-indigo-900 text-white rounded-2xl p-6 shadow-md border border-indigo-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <span class="bg-amber-400 text-indigo-950 text-xs font-black px-2.5 py-1 rounded-md uppercase tracking-wider">管理者専用ページ</span>
+                    <h2 class="text-xl md:text-2xl font-bold mt-1">新人教育 管理ダッシュボード</h2>
+                    <p class="text-xs text-indigo-200 mt-1">全スタッフの学習進捗状況および振り返り・申し送りログの確認、スタッフ登録情報の管理が行えます。</p>
+                </div>
+                <div class="flex items-center space-x-2 flex-wrap">
+                    <button @click="openStaffModal(null)" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs flex items-center">
+                        <i class="fa-solid fa-user-plus mr-1.5"></i> 新規スタッフ登録
+                    </button>
+                    <button @click="isAdmin = false" class="bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs flex items-center">
+                        <i class="fa-solid fa-arrow-left mr-1.5"></i> 現場画面へ戻る
+                    </button>
+                </div>
+            </div>
+
+            <!-- Admin Content Grid (Left: Staff Selector / Right: Details & Log) -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <!-- Left Panel: Staff List Card -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+                    <h3 class="font-bold text-slate-800 text-sm border-b pb-2 flex items-center justify-between">
+                        <span><i class="fa-solid fa-users text-indigo-600 mr-2"></i>対象スタッフ一覧</span>
+                        <span class="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-mono font-bold">{{ staffList.length }}名</span>
+                    </h3>
+                    
+                    <div class="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                        <div v-for="staff in staffList" :key="staff.id"
+                             @click="selectedStaffId = staff.id"
+                             :class="['p-3.5 rounded-xl border transition cursor-pointer flex items-center justify-between gap-2 select-none',
+                                      selectedStaffId === staff.id ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-500/20' : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100']">
+                            <div>
+                                <div class="font-bold text-sm text-slate-800 flex items-center">
+                                    {{ staff.name }}
+                                    <span class="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-normal">{{ staff.role }}</span>
+                                </div>
+                                <div class="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-1">
+                                    <span class="bg-indigo-100/70 text-indigo-800 px-1.5 py-0.5 rounded text-[10px] font-bold">{{ staff.courseName }}</span>
+                                    <span>入社: {{ staff.startDate }}</span>
+                                </div>
+                            </div>
+                            <div class="text-right shrink-0">
+                                <button @click.stop="openStaffModal(staff)" class="text-xs text-indigo-600 hover:text-indigo-800 p-1 font-bold">
+                                    <i class="fa-solid fa-user-pen"></i> 編集
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Panel: Selected Staff Comment Log & Detail Management -->
+                <div class="lg:col-span-2 space-y-6">
+                    <div v-if="currentStaff" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+                        <!-- Selected Staff Header Summary -->
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-4 gap-3">
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="text-lg font-bold text-slate-900">{{ currentStaff.name }} 様</h3>
+                                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800">{{ currentStaff.role }}（{{ currentStaff.courseName }}）</span>
+                                    <span class="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">{{ currentStaff.workType }}</span>
+                                </div>
+                                <p class="text-xs text-slate-500 mt-1">
+                                    入社年月日: {{ currentStaff.startDate }} | 修了予測日: {{ estimatedCompletionDate }}
+                                </p>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <button @click="openStaffModal(currentStaff)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-xl border border-slate-300">
+                                    <i class="fa-solid fa-user-gear mr-1"></i> スタッフ設定
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Interview Dates Summary Badges -->
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-center">
+                                <div class="text-[10px] text-slate-500 font-bold">2週目面談日</div>
+                                <div class="font-bold text-slate-800 mt-0.5">{{ currentStaff.interviewDates?.w2 || '未設定' }}</div>
+                            </div>
+                            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-center">
+                                <div class="text-[10px] text-slate-500 font-bold">1ヶ月面談日</div>
+                                <div class="font-bold text-slate-800 mt-0.5">{{ currentStaff.interviewDates?.m1 || '未設定' }}</div>
+                            </div>
+                            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-center">
+                                <div class="text-[10px] text-slate-500 font-bold">2ヶ月面談日</div>
+                                <div class="font-bold text-slate-800 mt-0.5">{{ currentStaff.interviewDates?.m2 || '未設定' }}</div>
+                            </div>
+                            <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-center">
+                                <div class="text-[10px] text-slate-500 font-bold">3ヶ月総括面談日</div>
+                                <div class="font-bold text-slate-800 mt-0.5">{{ currentStaff.interviewDates?.m3 || '未設定' }}</div>
+                            </div>
+                        </div>
+
+                        <!-- Comment Logs: Split 2 Columns for Rookie & Trainer -->
+                        <div class="space-y-3 pt-2">
+                            <h4 class="font-bold text-slate-800 text-sm flex items-center justify-between">
+                                <span><i class="fa-solid fa-comments text-indigo-600 mr-2"></i>管理者閲覧：本音 ＆ 申し送りコメントログ</span>
+                            </h4>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <!-- Rookie Staff Comments -->
+                                <div class="bg-blue-50/40 rounded-xl p-4 border border-blue-200/70 space-y-3">
+                                    <h5 class="font-bold text-xs text-blue-900 border-b border-blue-200 pb-2 flex items-center justify-between">
+                                        <span><i class="fa-solid fa-user-pen mr-1.5 text-blue-600"></i> 新人スタッフ入力（本音・相談）</span>
+                                        <span class="bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full text-[10px] font-mono">{{ staffRookieComments.length }}件</span>
+                                    </h5>
+                                    
+                                    <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1 text-xs">
+                                        <div v-if="staffRookieComments.length === 0" class="text-center py-8 text-slate-400">
+                                            入力された本音コメントはありません。
+                                        </div>
+                                        <div v-for="c in staffRookieComments" :key="c.id" class="bg-white p-3.5 rounded-xl border border-blue-100 space-y-1.5 shadow-2xs">
+                                            <div class="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                                                <span>{{ c.date }}</span>
+                                                <div class="flex items-center space-x-2">
+                                                    <button @click="translateComment(c)" 
+                                                            class="text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded text-[11px] font-bold flex items-center transition border border-indigo-200 shadow-2xs">
+                                                        <i class="fa-solid fa-language mr-1 text-indigo-600"></i>
+                                                        <span v-if="translatingCommentId === c.id">翻訳中...</span>
+                                                        <span v-else-if="c.translatedContent">再翻訳</span>
+                                                        <span v-else>🌐 日本語に翻訳</span>
+                                                    </button>
+                                                    <button @click="deleteComment(c.id)" title="このコメントを削除" class="text-rose-400 hover:text-rose-600 font-bold px-1"><i class="fa-solid fa-trash-can"></i></button>
+                                                </div>
+                                            </div>
+                                            <p class="text-slate-800 leading-relaxed font-medium whitespace-pre-wrap">{{ c.content }}</p>
+                                            <div v-if="c.translatedContent" class="mt-2 p-2.5 bg-indigo-50/90 rounded-xl border border-indigo-200 text-indigo-950 font-medium text-xs leading-relaxed shadow-2xs">
+                                                <div class="text-[10px] font-bold text-indigo-800 mb-0.5 flex items-center">
+                                                    <i class="fa-solid fa-robot mr-1 text-indigo-600"></i> {{ t('translatedLabel') }}:
+                                                </div>
+                                                <div class="whitespace-pre-wrap">{{ c.translatedContent }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Trainer Comments -->
+                                <div class="bg-emerald-50/40 rounded-xl p-4 border border-emerald-200/70 space-y-3">
+                                    <h5 class="font-bold text-xs text-emerald-900 border-b border-emerald-200 pb-2 flex items-center justify-between">
+                                        <span><i class="fa-solid fa-chalkboard-user mr-1.5 text-emerald-600"></i> 指導者入力（申送り・気づき）</span>
+                                        <span class="bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-mono">{{ staffTrainerComments.length }}件</span>
+                                    </h5>
+                                    
+                                    <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1 text-xs">
+                                        <div v-if="staffTrainerComments.length === 0" class="text-center py-8 text-slate-400">
+                                            入力された指導者申送りはありません。
+                                        </div>
+                                        <div v-for="c in staffTrainerComments" :key="c.id" class="bg-white p-3.5 rounded-xl border border-emerald-100 space-y-1.5 shadow-2xs">
+                                            <div class="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                                                <span>{{ c.date }}</span>
+                                                <button @click="deleteComment(c.id)" title="このコメントを削除" class="text-rose-400 hover:text-rose-600 font-bold px-1"><i class="fa-solid fa-trash-can"></i></button>
+                                            </div>
+                                            <p class="text-slate-800 leading-relaxed font-medium whitespace-pre-wrap">{{ c.content }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Admin Curriculum Progress & Item Note Direct Editor Section -->
+                        <div class="space-y-4 pt-4 border-t border-slate-200">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <h4 class="font-bold text-slate-800 text-sm flex items-center">
+                                    <i class="fa-solid fa-list-check text-amber-600 mr-2"></i>
+                                    【管理者直接編集】研修項目 ＆ 未達成内容・指導メモ
+                                </h4>
+                                <!-- Month Selector Tabs -->
+                                <div class="flex bg-slate-100 p-1 rounded-xl gap-1 shrink-0">
+                                    <button v-for="m in availableMonths" :key="m"
+                                            @click="activeMonth = m"
+                                            :class="['px-3 py-1 text-xs font-bold rounded-lg transition',
+                                                     activeMonth === m ? (m === 4 ? 'bg-amber-600 text-white shadow-xs' : 'bg-indigo-600 text-white shadow-xs') : (m === 4 ? 'bg-amber-100 text-amber-900 hover:bg-amber-200' : 'text-slate-600 hover:bg-slate-200')]">
+                                        {{ m }}ヶ月目{{ m === 4 ? ' (延長)' : '' }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Focus Topic Direct Editor in Admin Dashboard -->
+                            <div class="bg-amber-50/80 p-3.5 rounded-xl border border-amber-200/90 space-y-2 text-xs">
+                                <label class="font-bold text-amber-950 flex items-center justify-between">
+                                    <span class="flex items-center">
+                                        <i class="fa-solid fa-crosshairs text-amber-600 mr-1.5 text-sm"></i>
+                                        {{ activeMonth }}ヶ月目の重点課題（強化テーマ・個別目標）:
+                                    </span>
+                                    <span class="text-[10px] text-amber-800 font-normal">※管理者専用設定</span>
+                                </label>
+                                <div class="flex gap-2">
+                                    <textarea :value="currentFocusTopic" 
+                                              @input="updateFocusTopicForActiveMonth($event.target.value)" 
+                                              rows="3"
+                                              placeholder="今月重点的に指導・習得する課題を入力（複数行入力可能）" 
+                                              class="w-full bg-white border border-amber-300 rounded-xl px-3.5 py-2.5 font-bold text-xs md:text-sm text-slate-800 focus:ring-2 focus:ring-amber-500 shadow-2xs leading-relaxed"></textarea>
+                                </div>
+                            </div>
+
+                            <!-- Curriculum Items Grid for Selected Month -->
+                            <div class="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                                <div v-for="item in currentMonthItems" :key="item.id"
+                                     class="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 space-y-2 text-xs">
+                                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+                                        <div class="font-bold text-slate-800 text-xs sm:text-sm flex items-center space-x-2">
+                                            <span class="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded text-[10px] font-mono">No.{{ item.id }}</span>
+                                            <span>{{ item.title }}</span>
+                                        </div>
+                                        <div class="flex items-center space-x-3 text-[11px] font-bold">
+                                            <label class="flex items-center space-x-1 cursor-pointer">
+                                                <input type="checkbox" :checked="getCheckState(item.id, 'staff')" @change="toggleCheck(item.id, 'staff')" class="rounded text-blue-600 focus:ring-blue-500">
+                                                <span class="text-blue-800">本人OK</span>
+                                            </label>
+                                            <label class="flex items-center space-x-1 cursor-pointer">
+                                                <input type="checkbox" :checked="getCheckState(item.id, 'trainer')" @change="toggleCheck(item.id, 'trainer')" class="rounded text-emerald-600 focus:ring-emerald-500">
+                                                <span class="text-emerald-800">指導OK</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Direct Item Note Input in Admin Dashboard -->
+                                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 pt-1">
+                                        <label class="font-bold text-amber-900 shrink-0 flex items-center text-[11px]">
+                                            <i class="fa-regular fa-comment-dots text-amber-600 mr-1"></i>未達成内容・指導メモ:
+                                        </label>
+                                        <input type="text" 
+                                               :value="getItemNote(item.id)" 
+                                               @input="updateItemNote(item.id, $event.target.value)" 
+                                               placeholder="未達成の課題や指導上の注意点を入力" 
+                                               class="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-800 focus:ring-2 focus:ring-amber-500">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Add Custom Unachieved Item Input Section (Admin Only) -->
+                            <div class="pt-2">
+                                <div v-if="!showAddCustomForm">
+                                    <button @click="showAddCustomForm = true" 
+                                            class="w-full py-2.5 px-4 bg-white hover:bg-indigo-50/70 text-indigo-700 border border-dashed border-indigo-300 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 shadow-2xs">
+                                        <i class="fa-solid fa-square-plus text-base text-indigo-600"></i>
+                                        <span>＋ 未達成項目・繰り越し課題を手打ち追加する（{{ activeMonth }}ヶ月目カリキュラムへ追加）</span>
+                                    </button>
+                                </div>
+                                <div v-else class="bg-white p-4 rounded-xl border border-indigo-300 space-y-3 shadow-2xs">
+                                    <div class="flex justify-between items-center border-b border-indigo-100 pb-2">
+                                        <h4 class="font-bold text-xs text-indigo-900 flex items-center">
+                                            <i class="fa-solid fa-pen-to-square text-indigo-600 mr-1.5"></i>
+                                            未達成項目・個別繰り越し課題の手打ち追加（{{ activeMonth }}ヶ月目）
+                                        </h4>
+                                        <button @click="showAddCustomForm = false" class="text-slate-400 hover:text-slate-600 text-xs font-bold">&times;</button>
+                                    </div>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                                        <div>
+                                            <label class="block font-bold text-slate-700 mb-1">項目名（達成できなかった課題名など） *</label>
+                                            <input type="text" v-model="newCustomTitle" placeholder="" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold focus:ring-2 focus:ring-indigo-500">
+                                        </div>
+                                        <div>
+                                            <label class="block font-bold text-slate-700 mb-1">詳細・指導補足メモ（任意）</label>
+                                            <input type="text" v-model="newCustomDesc" placeholder="" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-medium focus:ring-2 focus:ring-indigo-500">
+                                        </div>
+                                    </div>
+                                    <div class="flex space-x-2 justify-end pt-1">
+                                        <button @click="showAddCustomForm = false" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition">キャンセル</button>
+                                        <button @click="addCustomItem" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center">
+                                            <i class="fa-solid fa-plus mr-1.5"></i> カリキュラムへ項目追加
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Workflow & Timetable Modal -->
+        <div v-if="showWorkflowModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div class="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-slate-200">
+                <!-- Modal Header -->
+                <div class="px-6 py-4 bg-emerald-800 text-white flex justify-between items-center">
+                    <h2 class="font-bold text-lg flex items-center">
+                        <i class="fa-solid fa-clipboard-list text-amber-300 mr-2"></i> 1日の業務フロー・タイムスケジュール一覧
+                    </h2>
+                    <button @click="showWorkflowModal = false" class="text-emerald-200 hover:text-white text-2xl font-bold">&times;</button>
+                </div>
+
+                <!-- Sub Navigation Tabs -->
+                <div class="bg-slate-100 border-b border-slate-200 px-6 py-2.5 flex space-x-2 overflow-x-auto text-xs font-bold">
+                    <button v-for="tab in ['介護日勤', '介護早番', '介護夜勤', '看護師日勤']" :key="tab"
+                            @click="workflowTab = tab"
+                            :class="['px-4 py-2 rounded-xl transition', workflowTab === tab ? 'bg-emerald-700 text-white shadow-xs' : 'bg-white text-slate-600 hover:bg-slate-200']">
+                        {{ tab }}
+                    </button>
+                </div>
+
+                <!-- Modal Content Area -->
+                <div class="p-6 overflow-y-auto flex-1 space-y-4 text-xs text-slate-700">
+                    
+                    <!-- 1. 介護日勤 (9:00 - 18:30) -->
+                    <div v-if="workflowTab === '介護日勤'" class="space-y-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between bg-emerald-50 p-3 rounded-xl border border-emerald-200 gap-2">
+                            <span class="font-bold text-emerald-900 text-sm">介護士 日勤シフト（9:00 〜 18:30）</span>
+                            <div class="space-x-1">
+                                <button @click="dayMode = '非対応'" :class="['px-3 py-1 rounded-lg text-xs font-bold transition', dayMode === '非対応' ? 'bg-emerald-700 text-white' : 'bg-white border border-slate-300 text-slate-600']">入浴非対応時</button>
+                                <button @click="dayMode = '対応'" :class="['px-3 py-1 rounded-lg text-xs font-bold transition', dayMode === '対応' ? 'bg-emerald-700 text-white' : 'bg-white border border-slate-300 text-slate-600']">入浴対応時</button>
+                            </div>
+                        </div>
+
+                        <table class="w-full border-collapse border border-slate-200 rounded-xl overflow-hidden">
+                            <thead>
+                                <tr class="bg-slate-100 font-bold text-slate-700 border-b border-slate-200">
+                                    <th class="p-2.5 border border-slate-200 w-20 text-center">時間</th>
+                                    <th class="p-2.5 border border-slate-200 w-28">定時項目</th>
+                                    <th class="p-2.5 border border-slate-200">業務内容の詳細</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-200 font-medium">
+                                <tr><td class="p-2 border text-center font-bold">09:00</td><td class="p-2 border">出勤</td><td class="p-2 border">日誌、申し送りノート、ChatWork、TimeTreeの確認・お茶準備</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">09:30</td><td class="p-2 border font-bold text-emerald-700">{{ dayMode==='対応'?'入浴介助':'体操' }}</td><td class="p-2 border">{{ dayMode==='対応'?'午前入浴介助':'ラジオ体操・機能訓練（2F 9:30~ / 3F 10:00~）' }}</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">10:00</td><td class="p-2 border">水分補給</td><td class="p-2 border">メニュー表から選んでもらう（2F 10:00 / 3F 10:30）、トイレ誘導</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">11:00</td><td class="p-2 border">昼食準備</td><td class="p-2 border">タオルウォーマーON、エプロン・口腔ケア準備、11:50厨房へ配膳車取り</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">12:00</td><td class="p-2 border font-bold text-amber-700">昼食介助</td><td class="p-2 border">ご飯・みそ汁盛り付け、配膳、食事介助、下膳</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">12:30</td><td class="p-2 border">食後ケア</td><td class="p-2 border">口腔ケア、トイレ誘導、エプロン・おしぼり洗濯、テーブル消毒、配膳車下げ</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">13:30</td><td class="p-2 border font-bold text-blue-600">休憩</td><td class="p-2 border">休憩1時間</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">14:30</td><td class="p-2 border">おやつ準備</td><td class="p-2 border">お茶準備・トイレ誘導（入浴対応時は15:00より午後入浴介助）</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">16:00</td><td class="p-2 border font-bold text-indigo-700">夕礼</td><td class="p-2 border">夕礼参加、トイレ誘導・排泄介助</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">16:30</td><td class="p-2 border">夕食準備</td><td class="p-2 border">タオルウォーマーON、夕食準備、食堂へ誘導・口腔体操、17:20配膳車取り</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">17:30</td><td class="p-2 border font-bold text-amber-700">夕食介助</td><td class="p-2 border">配膳・食事介助・下膳・口腔ケア・トイレ誘導・ナイトケア</td></tr>
+                                <tr><td class="p-2 border text-center font-bold">18:00</td><td class="p-2 border">片付け・日誌</td><td class="p-2 border">洗濯、テーブル・椅子消毒、配膳車下げ、業務日誌作成（18:30退勤）</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 2. 介護早番 (7:00 - 16:00) -->
+                    <div v-if="workflowTab === '介護早番'" class="space-y-4">
+                        <div class="bg-amber-50 p-3 rounded-xl border border-amber-200 font-bold text-amber-900 text-sm">
+                            介護士 早番シフト（7:00 〜 16:00）
+                        </div>
+                        <ul class="space-y-2 divide-y divide-slate-100 font-medium">
+                            <li class="pt-2"><strong class="text-emerald-700">07:00 :</strong> 出勤、ポストから新聞を回収して上がる（2F民報 / 3F読売）。日誌・ChatWork等確認。起床介助、点眼、食前薬、朝食準備、口腔体操（YouTube）、7:20厨房配膳車取り。</li>
+                            <li class="pt-2"><strong class="text-emerald-700">07:30 :</strong> 朝食介助、食後薬、下膳、口腔ケア、トイレ誘導。</li>
+                            <li class="pt-2"><strong class="text-emerald-700">08:00 :</strong> エプロン洗濯・テーブル消毒・配膳車下げ（9:00まで）。</li>
+                            <li class="pt-2"><strong class="text-emerald-700">09:00 :</strong> ミーティング（早番進行）、浴槽お湯溜め、排泄介助。</li>
+                            <li class="pt-2"><strong class="text-emerald-700">12:30 :</strong> 休憩1時間。</li>
+                            <li class="pt-2"><strong class="text-emerald-700">13:30 :</strong> 排泄介助、洗濯物たたみ、レクリエーション。</li>
+                            <li class="pt-2"><strong class="text-emerald-700">15:30 :</strong> 翌日入浴準備、16:00退勤。</li>
+                        </ul>
+                        <div class="p-3 bg-slate-100 rounded-xl border border-slate-300">
+                            <strong class="text-slate-800 font-bold">※早番1人体制時の注意点:</strong><br>
+                            新聞回収時に各フロアの状況を確認。配膳車は2台同時にエレベーターに乗せ、2Fで降りた後、3F用を上に上げる。下膳も同様。
+                        </div>
+                    </div>
+
+                    <!-- 3. 介護夜勤 (16:00 - 翌10:00) -->
+                    <div v-if="workflowTab === '介護夜勤'" class="space-y-4">
+                        <div class="bg-indigo-50 p-3 rounded-xl border border-indigo-200 font-bold text-indigo-900 text-sm">
+                            介護士 夜勤シフト（16:00 〜 翌10:00）
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                <h4 class="font-bold text-indigo-800 border-b pb-1">前半（16:00 〜 0:00）</h4>
+                                <p><strong>16:00 :</strong> 夕礼（3F夜勤者進行）、利用者様へ挨拶</p>
+                                <p><strong>16:30 :</strong> Pトイレ準備、居室カーテン・空調調整</p>
+                                <p><strong>17:30 :</strong> 夕食介助、ナイトケア、服薬</p>
+                                <p><strong>19:00 :</strong> コップ消毒（日曜日）、ポット洗浄（月末）</p>
+                                <p><strong>20:00 :</strong> 就寝薬介助、排泄介助</p>
+                                <p><strong>21:00/23:00 :</strong> 定時巡視、体位交換</p>
+                            </div>
+                            <div class="space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                <h4 class="font-bold text-indigo-800 border-b pb-1">後半（0:00 〜 翌10:00）</h4>
+                                <p><strong>01:00/03:00/05:00 :</strong> 定時巡視、体位交換、排泄介助</p>
+                                <p><strong>05:30 :</strong> お茶準備、タオルウォーマーON</p>
+                                <p><strong>06:00 :</strong> 起床・排泄介助（陰洗・リハパン交換）</p>
+                                <p><strong>06:30 :</strong> 洗顔、整髪、髭剃り介助</p>
+                                <p><strong>07:30 :</strong> 朝食介助、口腔ケア、Pトイレ片付け</p>
+                                <p><strong>09:00 :</strong> ミーティング、業務日誌作成（10:00退勤）</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. 看護師日勤 (9:00 - 18:00) -->
+                    <div v-if="workflowTab === '看護師日勤'" class="space-y-4">
+                        <div class="bg-blue-50 p-3 rounded-xl border border-blue-200 font-bold text-blue-900 text-sm">
+                            看護師 1日タイムスケジュール（9:00 〜 18:00）
+                        </div>
+                        <table class="w-full border-collapse border border-slate-200 rounded-xl overflow-hidden">
+                            <tbody class="divide-y divide-slate-200 font-medium">
+                                <tr><td class="p-2 border font-bold w-20">09:00</td><td class="p-2 border">出勤/申し送り、カートへ昼薬準備（各階配置）</td></tr>
+                                <tr><td class="p-2 border font-bold">09:05</td><td class="p-2 border">1F医務室にて就寝薬・朝食後薬の服薬後袋確認</td></tr>
+                                <tr><td class="p-2 border font-bold">09:10~</td><td class="p-2 border">午前バイタル測定（2F/3F入浴優先）、バイタル後処置</td></tr>
+                                <tr><td class="p-2 border font-bold">09:30~</td><td class="p-2 border">入浴後身体チェック・皮膚処置（初回・皮膚異常時の介護コール対応）</td></tr>
+                                <tr><td class="p-2 border font-bold">11:00~</td><td class="p-2 border">2F/3F 目薬、吸入、食前薬対応</td></tr>
+                                <tr><td class="p-2 border font-bold">12:30~</td><td class="p-2 border">昼食後服薬介助（2人対応時は分担）</td></tr>
+                                <tr><td class="p-2 border font-bold">13:30~</td><td class="p-2 border">午後バイタル測定（入浴者・体調不良者）</td></tr>
+                                <tr><td class="p-2 border font-bold">15:45~</td><td class="p-2 border">夕食後・就寝・朝食後薬を各階へ移動、日中状況を夜勤者へ申し送り</td></tr>
+                                <tr><td class="p-2 border font-bold">17:30~</td><td class="p-2 border">夕食後服薬介助、18:00 服薬後袋確認（18:00退勤）</td></tr>
+                            </tbody>
+                        </table>
+                        <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-slate-800">
+                            <strong class="font-bold">【定例業務】</strong><br>
+                            ・毎週土曜夕方: 小名浜薬局1週間分薬設置・情報共有<br>
+                            ・毎月: 櫛田病院訪問診療（午前・看護師1人対応）<br>
+                            ・月1回: 利用者様全体体重測定
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Guide Point Detail Modal -->
+        <div v-if="guideModalItem" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 border border-slate-200">
+                <div class="flex justify-between items-start border-b border-slate-100 pb-3">
+                    <div>
+                        <span class="text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">{{ t('guidePointBtn') }}・マニュアル</span>
+                        <h3 class="font-bold text-slate-800 text-base mt-1.5">{{ getItemTitle(guideModalItem) }}</h3>
+                    </div>
+                    <button @click="guideModalItem = null" class="text-slate-400 hover:text-slate-600 text-2xl font-bold">&times;</button>
+                </div>
+
+                <div class="space-y-3 text-xs text-slate-700">
+                    <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 leading-relaxed font-medium">
+                        <strong class="text-slate-900 block mb-1 font-bold"><i class="fa-solid fa-lightbulb text-amber-500 mr-1.5"></i> 指導時の要点 (根拠「なぜ」を伝える):</strong>
+                        {{ getItemGuide(guideModalItem) }}
+                    </div>
+                </div>
+
+                <div class="text-right">
+                    <button @click="guideModalItem = null" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-xl">
+                        閉じる
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Staff Add/Edit Modal (with Interview Schedule Adjustments) -->
+        <div v-if="showStaffModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
+                <h3 class="font-bold text-slate-800 text-base border-b pb-2">
+                    {{ editingStaff.id ? '新人スタッフ情報 編集' : '新規新人スタッフ 登録' }}
+                </h3>
+
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">お名前 *</label>
+                        <input type="text" v-model="editingStaff.name" placeholder="" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5">
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">職種・コース *</label>
+                        <select v-model="editingStaff.courseKey" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold">
+                            <option value="care_beginner">介護職：未経験者コース</option>
+                            <option value="care_experienced">介護職：経験者コース</option>
+                            <option value="nurse_beginner">看護師：未経験者コース</option>
+                            <option value="nurse_experienced">看護師：経験者コース</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">勤務形態 *</label>
+                        <select v-model="editingStaff.workType" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold">
+                            <option value="正社員（早番・日勤・夜勤）">正社員（早番・日勤・夜勤）</option>
+                            <option value="パート（日勤のみ）">パート（日勤のみ）</option>
+                            <option value="夜勤専従（夜勤のみ）">夜勤専従（夜勤のみ）</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">入社日 *</label>
+                        <input type="date" v-model="editingStaff.startDate" @change="recalculateInterviewDates" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-bold">
+                    </div>
+
+                    <!-- Interview Schedule Customization -->
+                    <div class="p-3 bg-amber-50/60 rounded-xl border border-amber-200 space-y-2">
+                        <label class="block font-bold text-amber-900 border-b border-amber-200 pb-1">
+                            <i class="fa-regular fa-calendar-alt mr-1"></i> 面談予定日の調整 (入社日より自動試算)
+                        </label>
+
+                        <div class="grid grid-cols-2 gap-2 text-[11px]">
+                            <div>
+                                <span class="block text-slate-600 font-bold mb-0.5">2週目面談</span>
+                                <input type="date" v-model="editingStaff.interviewDates.w2" class="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-bold">
+                            </div>
+                            <div>
+                                <span class="block text-slate-600 font-bold mb-0.5">1ヶ月目面談</span>
+                                <input type="date" v-model="editingStaff.interviewDates.m1" class="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-bold">
+                            </div>
+                            <div>
+                                <span class="block text-slate-600 font-bold mb-0.5">2ヶ月目面談</span>
+                                <input type="date" v-model="editingStaff.interviewDates.m2" class="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-bold">
+                            </div>
+                            <div>
+                                <span class="block text-slate-600 font-bold mb-0.5">3ヶ月目(総括)</span>
+                                <input type="date" v-model="editingStaff.interviewDates.m3" class="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-bold">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center pt-3 border-t">
+                    <button v-if="editingStaff.id" @click="deleteStaff(editingStaff.id)" class="text-xs text-red-600 hover:text-red-800 font-bold">
+                        削除
+                    </button>
+                    <div v-else></div>
+
+                    <div class="space-x-2">
+                        <button @click="showStaffModal = false" class="px-3.5 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">キャンセル</button>
+                        <button @click="saveStaff" class="px-4 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-xl shadow-xs">保存する</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Auth Modal -->
+        <div v-if="showAdminAuthModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl shadow-xl max-w-xs w-full p-6 space-y-4 text-center border border-slate-200">
+                <i class="fa-solid fa-user-shield text-4xl text-indigo-600"></i>
+                <h3 class="font-bold text-slate-800 text-base">管理者パスコード認証</h3>
+                <p class="text-xs text-slate-500">管理者用パスコードを入力してください</p>
+
+                <input type="password" v-model="adminPasscode" @keyup.enter="verifyAdminPasscode" placeholder="パスコードを入力" class="w-full text-center text-lg tracking-widest font-mono bg-slate-50 border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-indigo-500">
+
+                <div class="flex space-x-2 pt-2">
+                    <button @click="showAdminAuthModal = false" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl">キャンセル</button>
+                    <button @click="verifyAdminPasscode" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs">ログイン</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- GAS Config Modal -->
+        <div v-if="showConfigModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4 border border-slate-200">
+                <div class="flex justify-between items-center border-b pb-3">
+                    <h3 class="font-bold text-slate-800 text-base flex items-center">
+                        <i class="fa-solid fa-cloud-arrow-up text-emerald-600 mr-2"></i> データ保存・GAS連携設定
+                    </h3>
+                    <button @click="showConfigModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">Google Apps Script (GAS) WebアプリURL</label>
+                        <input type="url" v-model="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 font-mono text-xs focus:ring-2 focus:ring-emerald-500">
+                        <p class="text-slate-500 mt-1">※GASのWebアプリURLを入力すると、Googleスプレッドシートへのクラウド保存・複数人でのリアルタイム共有が可能になります。</p>
+                    </div>
+
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-800 space-y-1">
+                        <p class="font-bold flex items-center"><i class="fa-solid fa-shield-halved mr-1.5 text-amber-600"></i> 保存状態の仕組み</p>
+                        <p>・<strong>GAS URL設定時</strong>: スプレッドシートへ同期保存されます（ブラウザのLocal Storageにもバックアップ）。</p>
+                        <p>・<strong>GAS URL未設定時</strong>: このブラウザのLocal Storageに保存されます（リロードしてもデータは保持されます）。</p>
+                    </div>
+
+                    <div v-if="lastSavedTime" class="text-slate-500 text-right">
+                        最終保存日時: {{ lastSavedTime }}
+                    </div>
+                </div>
+
+                <div class="flex space-x-2 pt-2">
+                    <button @click="loadDataFromGAS" :disabled="isLoading" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center justify-center">
+                        <i class="fa-solid fa-rotate mr-1.5"></i> クラウドから再読み込み
+                    </button>
+                    <button @click="saveGasUrl" class="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-xs">
+                        設定を保存
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instructor Schedule Config Modal -->
+        <div v-if="showInstructorScheduleModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center border-b pb-3">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-base flex items-center">
+                            <i class="fa-regular fa-calendar-alt text-indigo-600 mr-2 text-lg"></i>
+                            【管理者機能】月間OJT指導担当者スケジュール設定
+                        </h3>
+                        <p class="text-xs text-slate-500 mt-0.5">シフト表に合わせて、日付ごとの指導担当スタッフ名を事前入力できます</p>
+                    </div>
+                    <button @click="showInstructorScheduleModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+
+                <div class="space-y-4 text-xs">
+                    <div class="flex items-center justify-between bg-indigo-50 p-3 rounded-xl border border-indigo-200">
+                        <div class="font-bold text-indigo-950">
+                            対象新人: <span class="text-indigo-700 font-extrabold text-sm ml-1">{{ currentStaff.name }}</span>
+                        </div>
+                        <div class="text-xs font-bold text-slate-600">
+                            入社日: {{ currentStaff.startDate || '未設定' }}
+                        </div>
+                    </div>
+
+                    <!-- Month Selector Tabs in Schedule Modal -->
+                    <div class="flex bg-indigo-100/70 p-1 rounded-xl gap-1">
+                        <button v-for="m in [1, 2, 3]" :key="m"
+                                @click="scheduleActiveMonth = m"
+                                :class="['flex-1 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center space-x-1.5',
+                                         scheduleActiveMonth === m ? 'bg-indigo-600 text-white shadow-xs' : 'text-indigo-900 hover:bg-indigo-200/60']">
+                            <span>{{ m }}ヶ月目</span>
+                            <span class="text-[10px] opacity-80">({{ (m-1)*30 + 1 }}〜{{ m*30 }}日目)</span>
+                        </button>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="font-bold text-slate-700 flex justify-between items-center">
+                            <span>{{ scheduleActiveMonth }}ヶ月目の日別指導担当者入力（30日間）</span>
+                            <span class="text-[11px] text-slate-500 font-normal">※入力した瞬間に自動保存されます</span>
+                        </div>
+
+                        <!-- Dates Grid List -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[50vh] overflow-y-auto p-1">
+                            <div v-for="d in getMonthDates" :key="d.dateStr" 
+                                 :class="['p-2.5 rounded-xl border flex flex-col space-y-1.5 transition', 
+                                          d.isWeekend ? 'bg-amber-50/50 border-amber-200' : 'bg-slate-50 border-slate-200']">
+                                <div class="flex justify-between items-center font-bold">
+                                    <span :class="d.isWeekend ? 'text-amber-900' : 'text-slate-700'">
+                                        {{ d.dayNum }}日目: {{ d.displayLabel }}
+                                    </span>
+                                    <span v-if="d.dateStr === getTodayStr()" class="px-1.5 py-0.5 rounded text-[9px] bg-indigo-600 text-white font-bold">本日</span>
+                                </div>
+                                <input type="text" 
+                                       :value="getInstructorForDate(d.dateStr)" 
+                                       @input="setInstructorForDate(d.dateStr, $event.target.value)" 
+                                       placeholder="指導者名（例: 佐藤）" 
+                                       class="w-full bg-white border border-slate-300 rounded-lg p-1.5 font-bold text-xs focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end pt-3 border-t">
+                    <button @click="showInstructorScheduleModal = false" class="px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition">
+                        設定を完了して閉じる
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <footer class="bg-slate-800 text-slate-400 py-4 text-center text-xs mt-auto">
+            有料老人ホームくすの木 介護新人教育進捗管理システム &copy; 2026
+        </footer>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, watch } = Vue;
+
+        createApp({
+            setup() {
+                // Application State
+                const isAdmin = ref(false);
+                const showAdminAuthModal = ref(false);
+                const adminPasscode = ref('');
+                const showWorkflowModal = ref(false);
+                const showConfigModal = ref(false);
+                const workflowTab = ref('介護日勤');
+                const dayMode = ref('非対応');
+                const guideModalItem = ref(null);
+                const showStaffModal = ref(false);
+                const commentSubmittedMsg = ref(false);
+
+                const activeMonth = ref(1);
+                const selectedStaffId = ref(1);
+
+                // Multilingual i18n State & Dictionaries
+                const currentLang = ref(localStorage.getItem('kusunoki_lang') || 'ja');
+                const toggleLanguage = () => {
+                    currentLang.value = currentLang.value === 'ja' ? 'my' : 'ja';
+                    localStorage.setItem('kusunoki_lang', currentLang.value);
+                };
+
+                const i18nDict = {
+                    ja: {
+                        appTitle: '有料老人ホームくすの木',
+                        appSubTitle: '新人教育進捗管理・業務サポートシステム',
+                        workflowBtn: '業務フロー',
+                        adminLoginBtn: '管理者ログイン',
+                        adminLogoutBtn: 'ログアウト',
+                        langToggleBtn: '🇲🇲 မြန်မာ (ビルマ語)',
+                        targetStaffLabel: '対象新人スタッフ:',
+                        instructorToday: '本日の指導担当:',
+                        notSet: '未設定',
+                        edit: '編集',
+                        complete: '完了',
+                        estimatedCompletion: '研修終了予定:',
+                        month: 'ヶ月目',
+                        monthGoal: '月間目標:',
+                        interviewTiming: '面談時期:',
+                        interviewDate: '予定日:',
+                        focusTopicTitle: '現在の重点課題（毎月の個別目標・強化テーマ）',
+                        staffProgress: '新人セルフチェック達成率',
+                        trainerProgress: '指導者確認率',
+                        guidePointBtn: '指導ポイント',
+                        staffOk: '本人OK',
+                        trainerOk: '指導OK',
+                        needsReview: '要再指導',
+                        customItemAddBtn: '＋ 未達成項目・繰り越し課題を手打ち追加する',
+                        unachievedNote: '未達成内容・指導メモ:',
+                        rookieCommentTitle: '💬 新人スタッフ本音メモ・感想',
+                        rookieCommentPlaceholder: '今日感じた不安、難しかった業務、質問したいことなどをビルマ語または日本語で自由に入力してください...',
+                        trainerCommentTitle: '📝 指導者申送り・指導記録',
+                        trainerCommentPlaceholder: '本日の指導内容、成長点、次回への申送り事項を入力...',
+                        submitCommentBtn: '送信する',
+                        translateBtn: '🌐 日本語に翻訳',
+                        translating: '翻訳中...',
+                        translatedLabel: '日本語訳 (AI/GAS自動翻訳)',
+                        reflectionSectionTitle: '本日の振り返り・申し送り',
+                        autoSavedBadge: '入力内容は全自動保存されます',
+                        rookieCardTitle: '【新人スタッフ入力】振り返り・不安相談',
+                        rookieCardSub: '本日不安に思ったこと、質問、自己評価など',
+                        rookieSubmitBtn: '新人コメントを保存（管理者へ送信）',
+                        trainerCardTitle: '【指導者入力】申し送り・アドバイス',
+                        trainerCardSub: '本日の指導内容、良かった点、明日の課題など',
+                        trainerSubmitBtn: '指導者コメントを保存（管理者へ送信）',
+                        privacyNotice: '入力・保存されたコメントは、セキュリティおよびプライバシー保護のため管理者画面（管理者ログイン時）でのみ集約・表示されます。',
+                        isNight: '夜勤関連',
+                        exemptDay: '日勤対象外（免除）',
+                        exemptNight: '夜勤対象外（免除）',
+                        customItemBadge: '手打ち追加・繰り越し課題',
+                        guideManualLabel: '指導ポイント・マニュアル',
+                        guideKeyPoint: '指導時の要点 (根拠「なぜ」を伝える):',
+                        closeBtn: '閉じる',
+                        month4Title: '4ヶ月目（延長・補講）',
+                        month4Goal: '3ヶ月目までの未達成課題を集約し、指導者と共に最終確認を行う補講期間です。',
+                        carriedOverBadge: 'ヶ月目からの繰り越し課題'
+                    },
+                    my: {
+                        appTitle: 'အခကြေးငွေယူသော သက်ကြီးရွယ်အို အိမ် kusonoki',
+                        appSubTitle: 'ဝန်ထမ်းသစ် လေ့ကျင့်ရေး တိုးတက်မှု စီမံခန့်ခွဲမှု စနစ်',
+                        workflowBtn: 'လုပ်ငန်းခွင် လုပ်ထုံးလုပ်နည်းများ',
+                        adminLoginBtn: 'မန်နေဂျာ ဝင်ရောက်ရန်',
+                        adminLogoutBtn: 'ထွက်ရန်',
+                        langToggleBtn: '🇯🇵 日本語 (日本語)',
+                        targetStaffLabel: 'ဝန်ထမ်းသစ် အမည်:',
+                        instructorToday: 'ယနေ့ သင်ကြားပေးသူ:',
+                        notSet: 'မသတ်မှတ်ရသေးပါ',
+                        edit: 'ပြင်ဆင်ရန်',
+                        complete: 'ပြီးပြီ',
+                        estimatedCompletion: 'သင်တန်းပြီးစီးမည့်ရက်:',
+                        month: 'လမြောက်',
+                        monthGoal: 'လစဉ် ပန်းတိုင်:',
+                        interviewTiming: 'တွေ့ဆုံဆွေးနွေးမည့်ကာလ:',
+                        interviewDate: 'ရက်စွဲ:',
+                        focusTopicTitle: 'လက်ရှိ အဓိက အလေးပေးရမည့် အကြောင်းအရာ',
+                        staffProgress: 'မိမိကိုယ်တိုင် စစ်ဆေးမှု ပြီးစီးနှုန်း',
+                        trainerProgress: 'သင်ကြားသူ အတည်ပြုမှု ပြီးစီးနှုန်း',
+                        guidePointBtn: 'သင်ကြားရေး အချက်များ',
+                        staffOk: 'မိမိ OK',
+                        trainerOk: 'သင်ကြားသူ OK',
+                        needsReview: 'ပြန်လည် သင်ကြားရန် လိုအပ်သည်',
+                        customItemAddBtn: '＋ ထပ်မံဖြည့်စွက်ရမည့် အကြောင်းအရာ ထည့်ရန်',
+                        unachievedNote: 'မပြီးသေးသော အကြောင်းအရာ မှတ်စု:',
+                        rookieCommentTitle: '💬 ဝန်ထမ်းသစ် မှတ်ချက် / ရင်ဖွင့်သံ',
+                        rookieCommentPlaceholder: 'ယနေ့ အခက်အခဲများ၊ မေးခွန်းများကို မြန်မာဘာသာ သို့မဟုတ် ဂျပန်ဘာသာဖြင့် လွတ်လပ်စွာ ရေးသားနိုင်ပါသည်။',
+                        trainerCommentTitle: '📝 သင်ကြားသူ မှတ်တမ်း',
+                        trainerCommentPlaceholder: 'ယနေ့ သင်ကြားပေးမှုနှင့် သင်တန်းသား၏ တိုးတက်မှုကို ရေးပါ...',
+                        submitCommentBtn: 'ပေးပို့မည်',
+                        translateBtn: '🌐 ဂျပန်ဘာသာသို့ ပြန်ဆိုရန် (日本語訳)',
+                        translating: 'ဘာသာပြန်နေသည်...',
+                        translatedLabel: 'ဂျပန်ဘာသာပြန် (日本語訳)',
+                        reflectionSectionTitle: 'ယနေ့ သုံးသပ်ချက်နှင့် အသိပေးချက်',
+                        autoSavedBadge: 'ဖြည့်သွင်းချက်များကို အလိုအလျောက် သိမ်းဆည်းပါသည်။',
+                        rookieCardTitle: '【ဝန်ထမ်းသစ် ဖြည့်သွင်းရန်】 သုံးသပ်ချက်နှင့် မေးခွန်းများ',
+                        rookieCardSub: 'ယနေ့ စိုးရိမ်ရသောအချက်၊ မေးခွန်း၊ မိမိကိုယ်တိုင် စစ်ဆေးချက်',
+                        rookieSubmitBtn: 'မှတ်ချက် သိမ်းဆည်းမည် (မန်နေဂျာထံ ပေးပို့မည်)',
+                        trainerCardTitle: '【သင်ကြားသူ ဖြည့်သွင်းရန်】 အသိပေးချက်နှင့် အကြံပြုချက်',
+                        trainerCardSub: 'ယနေ့ သင်ကြားပေးမှု၊ ကောင်းမွန်သော အချက်များ၊ မနက်ဖြန်အတွက် အကြောင်းအရာ',
+                        trainerSubmitBtn: 'သင်ကြားသူ မှတ်ချက် သိမ်းဆည်းမည်',
+                        privacyNotice: 'ဖြည့်သွင်းထားသော မှတ်ချက်များကို လုံခြုံရေးနှင့် ပုဂ္ဂိုလ်ရေး အချက်အလက် ကာကွယ်ရန် မန်နေဂျာ မျက်နှာပြင်တွင်သာ ပြသပါမည်။',
+                        isNight: 'ညဂျူတီ ဆိုင်ရာ',
+                        exemptDay: 'နေ့ဂျူတီ ကင်းလွတ်',
+                        exemptNight: 'ညဂျူတီ ကင်းလွတ်',
+                        customItemBadge: 'ထပ်မံ ဖြည့်စွက်ထားသော အကြောင်းအရာ',
+                        guideManualLabel: 'သင်ကြားရေး အချက်များနှင့် လမ်းညွှန်',
+                        guideKeyPoint: 'သင်ကြားစဉ် အဓိက အချက် (အကြောင်းရင်း «ဘာကြောင့်» ကို ရှင်းပြပါ):',
+                        closeBtn: 'ပိတ်မည်',
+                        month4Title: '၄ လမြောက် (တိုးချဲ့/ပြန်လည်လေ့ကျင့်ရေး)',
+                        month4Goal: '၃ လမြောက်အထိ မပြီးသေးသော အကြောင်းအရာများကို စုစည်း၍ ပြန်လည် စစ်ဆေးသော ကာလဖြစ်ပါသည်။',
+                        carriedOverBadge: 'လမြောက်မှ လွှဲပြောင်းထားသော အကြောင်းအရာ'
+                    }
+                };
+
+                const t = (key) => {
+                    if (i18nDict[currentLang.value] && i18nDict[currentLang.value][key]) {
+                        return i18nDict[currentLang.value][key];
+                    }
+                    return i18nDict.ja[key] || key;
+                };
+
+                const curriculumDictMY = {
+                    // 介護職：未経験者コース
+                    'cb_1_1': { title: 'အိုရီယန်းတေးရှင်း (အဖွဲ့အစည်းဆိုင်ရာ ရှင်းလင်းချက်)', description: 'ဂေဟာ၏ မူဝါဒ၊ အလုပ်ခွင် စည်းကမ်း၊ ဘေးအန္တရာယ် ကာကွယ်ရေး၊ ကူးစက်ရောဂါ ထိန်းချုပ်ရေးနှင့် ညှဉ်းပန်းနှိပ်စက်မှု ကာကွယ်ရေး', guidePoint: 'ဂေဟာ၏ မူဝါဒနှင့် ဘေးကင်းလုံခြုံရေး ဦးစားပေး အသိပညာကို ရှင်းလင်းပေးပါ။' },
+                    'cb_1_2': { title: 'ပတ်ဝန်းကျင်နှင့် ပစ္စည်းကိရိယာများ နားလည်ခြင်း', description: 'ပစ္စည်းထားရှိရာနေရာ၊ ကောလ်ဘဲလ် (Nurse Call) တုံ့ပြန်မှု စည်းကမ်း၊ ဝှီးချဲ ဘေးကင်းစွာ အသုံးပြုမှု', guidePoint: 'ဘရိတ် သေချာ အသုံးပြုရန်နှင့် Nurse Call တုံ့ပြန်မှု ဦးစားပေးချက်ကို သင်ကြားပေးပါ။' },
+                    'cb_1_3': { title: 'ဆက်ဆံရေးနှင့် ယဉ်ကျေးပျူငှာစွာ ပြုမူခြင်း', description: 'နေထိုင်သူများ၏ မျက်နှာနှင့် အမည် မှတ်မိခြင်း၊ ယဉ်ကျေးသော စကားပြောဆိုမှု', guidePoint: 'မျက်လုံးချင်း ဆုံ၍ အမည်ခေါ်ကာ ယဉ်ကျေးစွာ ဆက်ဆံရန် ရှင်းပြပါ။' },
+                    'cb_1_4': { title: 'အစာပြင်ဆင်ခြင်းနှင့် ထမင်းစားပွဲ ပြင်ဆင်ခြင်း', description: 'အစာပြင်ဆင်/သိမ်းဆည်းမှု အဆင့်ဆင့်၊ ရေနွေးကြမ်းနှင့် လက်သုတ်ပုဝါ ပြင်ဆင်ခြင်း', guidePoint: 'အစာပြင်ဆင်မှု အစဉ်လိုက်နှင့် သန့်ရှင်းရေး အဆင့်ဆင့်ကို သင်ကြားပေးပါ။' },
+                    'cb_1_5': { title: 'ပုဂ္ဂိုလ်ရေး လွတ်လပ်ခွင့် ကာကွယ်ခြင်းနှင့် စည်းကမ်းများ', description: 'ခန္ဓာကိုယ် ပေါ်ထွက်မှုကို လျှော့ချခြင်း၊ အခန်းတွင်း ဝင်ရောက်စဉ် နှုတ်ဆက်ခြင်း', guidePoint: 'ကာတွန်းလိုက်ကာ အသုံးပြုမှုနှင့် ပုဂ္ဂိုလ်ရေး လွတ်လပ်ခွင့် လေးစားမှုကို ရှင်းလင်းပေးပါ။' },
+                    'cb_2_1': { title: 'အိပ်ရာမှ ထိုင်ခုံသို့ ရွှေ့ပြောင်းပေးခြင်း', description: 'Body Mechanics အသုံးပြု၍ ဘေးကင်းစွာ ရွှေ့ပြောင်းပေးခြင်း', guidePoint: 'မိမိနှင့် ဝန်ထမ်းသစ် ခန္ဓာကိုယ် ဒဏ်မဖြစ်စေရန် မက္ကနစ် နည်းလမ်းကို ရှင်းပြပါ။' },
+                    'cb_2_2': { title: 'ရေချိုးပေးခြင်း ကူညီမှု', description: 'ရေအပူချိန် စစ်ဆေးခြင်း၊ အရေပြား အခြေအနေ ကြည့်ရှုခြင်း၊ အဝတ်အစား လဲလှယ်ပေးခြင်း', guidePoint: 'ရေအပူချိန်ကို ကာယကံရှင်အား အမြဲမေးမြန်းပါ။ အရေပြား ပြောင်းလဲမှုကို ဂရုစိုက်ပါ။' },
+                    'cb_2_5': { title: 'အစာကျွေးခြင်းနှင့် သီးခြင်းမှ ကာကွယ်ခြင်း', description: 'သီးခြင်းမှ ကာကွယ်သော ပုံစံ၊ အစာပမာဏ ညှိယူခြင်း', guidePoint: 'မေးစေ့ကို အောက်စို့သော ပုံစံ ပြုလုပ်ရသည့် အကြောင်းရင်းကို သင်ကြားပေးပါ။' },
+                    'cb_2_6': { title: 'အိမ်သာသွားခြင်းနှင့် ဒိုင်ပါ လဲလှယ်ပေးခြင်း', description: 'အိမ်သာသို့ လမ်းညွှန်ခြင်း၊ ဒိုင်ပါ လဲလှယ်ခြင်း၊ သန့်ရှင်းရေး ပြုလုပ်ပေးခြင်း', guidePoint: 'မြန်ဆန် သန့်ရှင်းစွာ ပြုလုပ်နည်းနှင့် ပိုးမွှား ကာကွယ်ရေး နည်းလမ်းကို ရှင်းပြပါ။' },
+                    'cb_2_3': { title: 'ပြုစုစောင့်ရှောက်မှု မှတ်တမ်း ရေးသွင်းခြင်း', description: 'တက်ဘလက်/PC တွင် မှတ်တမ်းတင်ခြင်း၊ အချက်အလက်အပေါ် အခြေခံ၍ ရေးသားခြင်း', guidePoint: 'မိမိ ထင်မြင်ချက် မဟုတ်ဘဲ အမှန်တကယ် ဖြစ်ပျက်ပုံကို မှတ်တမ်းတင်ရန် သင်ကြားပေးပါ။' },
+                    'cb_2_4': { title: 'ညဂျူတီ ပြင်ဆင်ခြင်းနှင့် စည်းကမ်းများ', description: 'ညဘက် ပုံမှန် စစ်ဆေးခြင်း၊ တံခါး သော့ခတ်မှု စစ်ဆေးခြင်း', guidePoint: 'ညဘက် အသံမထွက်စေရန်နှင့် မီးရောင် အသုံးပြုပုံ 配慮 ကို မျှဝေပါ။' },
+                    'cb_3_1': { title: 'နေ့ဂျူတီ လုပ်ငန်း ပုံမှန် ဆောင်ရွက်နိုင်ခြင်း', description: 'အချိန်ဇယားအတိုင်း လုပ်ငန်း ဦးစားပေး ဆောင်ရွက်ခြင်း', guidePoint: 'ရုတ်တရက် အခြေအနေများတွင် ဦးစားပေး သတ်မှတ်နည်းကို ကူညီပေးပါ။' },
+                    'cb_3_2': { title: 'ညဂျူတီ တာဝန်ယူ ဆောင်ရွက်နိုင်ခြင်း', description: 'အရေးပေါ် ဆက်သွယ်ရေး စနစ် နားလည်ခြင်းနှင့် ညဂျူတီ ဆောင်ရွက်ခြင်း', guidePoint: 'အရေးပေါ် ဆက်သွယ်ရန် အဆင့်ဆင့်နှင့် ဆေးသေတ္တာ တည်နေရာကို နောက်ဆုံး စစ်ဆေးပါ။' },
+                    'cb_3_3': { title: 'အဖွဲ့အစည်းတွင်း ပူးပေါင်းဆောင်ရွက်ခြင်း (HORENSO)', description: 'နာစ့်များသို့ ကျန်းမာရေး အခြေအနေ သတင်းပို့ခြင်း', guidePoint: 'SBAR နည်းလမ်းဖြင့် သတင်းပို့ လေ့ကျင့်ပေးပါ။' },
+                    'cb_3_4': { title: 'ဘေးအန္တရာယ် စီမံခန့်ခွဲမှုနှင့် အစီရင်ခံစာ ရေးသားခြင်း', description: 'မတော်တဆမှု မဖြစ်မီ အစီရင်ခံစာ ရေးသားခြင်းနှင့် ကာကွယ်ရေး နည်းလမ်းများ', guidePoint: 'နောက်ထပ် မဖြစ်ပွားစေရန် အစီရင်ခံစာ ရေးသားရခြင်းဖြစ်ကြောင်း နားလည်စေပါ။' },
+
+                    // 介護職：経験者コース
+                    'ce_1_1': { title: 'အိုရီယန်းတေးရှင်းနှင့် အရေးပေါ် စနစ်', description: 'ဂေဟာ မူဝါဒ၊ မတော်တဆမှု အစီရင်ခံရေး၊ အရေးပေါ် ဆက်သွယ်ရေး ကွန်ရက်', guidePoint: 'ဂေဟာ၏ စည်းကမ်းများနှင့် အကျွမ်းတဝင် ရှိစေရန် ကူညီပေးပါ။' },
+                    'ce_1_2': { title: 'ပြုစုစောင့်ရှောက်မှု ဆော့ဖ်ဝဲနှင့် မှတ်တမ်း စည်းကမ်းများ', description: 'မှတ်တမ်း ရေးသွင်းနည်းနှင့် အသိပေးချက်များ စစ်ဆေးနည်း', guidePoint: 'ဂေဟာ၏ ရေးသွင်း စည်းကမ်းများကို မျှဝေပါ။' },
+                    'ce_1_3': { title: 'ပစ္စည်းများနှင့် ကိရိယာများ နားလည်ခြင်း', description: 'ပစ္စည်းများ ထားရှိရာနေရာနှင့် အသုံးပြုပုံ စစ်ဆေးခြင်း', guidePoint: 'ယခင် အလုပ်ခွင်နှင့် ကွာခြားချက်များကို အဓိက စစ်ဆေးပါ။' },
+                    'ce_1_4': { title: 'အချိန်တို လေ့လာခြင်း (Shadowing)', description: 'အဓိက နည်းပညာများ စစ်ဆေးခြင်းနှင့် ဂေဟာ စံနှုန်းအတိုင်း ညှိယူခြင်း', guidePoint: 'ဘေးကင်းရေးအတွက် ဂေဟာ၏ စံနှုန်းများကို ရှင်းလင်းပေးပါ။' },
+                    'ce_2_1': { title: 'တစ်ဦးချင်း ပြုစုစောင့်ရှောက်မှု ဆန်းစစ်ခြင်း', description: 'နေထိုင်သူ တစ်ဦးစီ၏ နေထိုင်မှု အလေ့အထများကို နားလည်ခြင်း', guidePoint: 'တစ်ဦးချင်း လိုအပ်ချက်များနှင့် ဘေးအန္တရာယ်များကို သတိပြုစေပါ။' },
+                    'ce_2_2': { title: 'ညဂျူတီ စောစီးစွာ စတင်ခြင်း', description: '၁ ကြိမ်ခန့် တွဲဖက် ဝင်ပြီးနောက် မိမိကိုယ်တိုင် ဆောင်ရွက်ခြင်း', guidePoint: 'ညဘက် ဂေဟာ၏ သီးသန့် အစဉ်အလာများကို စစ်ဆေးပါ။' },
+                    'ce_2_3': { title: 'ယဉ်ကျေးစွာ ပြုမူခြင်းနှင့် မိသားစုများနှင့် ဆက်ဆံခြင်း', description: 'မိသားစုများနှင့် ဧည့်သည်များအား ယဉ်ကျေးစွာ ဆက်ဆံသည့် စည်းကမ်းများ', guidePoint: 'ဂေဟာ၏ ကိုယ်စားပြုအဖြစ် ယဉ်ကျေးစွာ ဆက်ဆံစေပါ။' },
+                    'ce_3_1': { title: 'လုပ်ငန်းများ လုံးဝ မိမိကိုယ်တိုင် ဆောင်ရွက်နိုင်ခြင်း', description: 'အချိန်ဇယား မိမိကိုယ်တိုင် စီမံခြင်းနှင့် ရုတ်တရက် အခြေအနေ တုံ့ပြန်ခြင်း', guidePoint: 'မိမိကိုယ်တိုင် ဆောင်ရွက်နိုင်မှုကို စစ်ဆေးပါ။' },
+                    'ce_3_2': { title: 'တိုးတက်ရေး အကြံပြုချက်နှင့် အဖွဲ့ကို ကူညီခြင်း', description: 'အတွေ့အကြုံရှိသူအဖြစ် လုပ်ငန်း ထိရောက်ရေး အကြံပြုခြင်း', guidePoint: 'အဖွဲ့အစည်း၏ အားကိုးရသူအဖြစ် မျှော်လင့်ပါသည်။' },
+
+                    // 看護師：未経験者コース
+                    'nb_1_1': { title: 'အိုရီယန်းတေးရှင်းနှင့် ပြုစုစောင့်ရှောက်မှု တွဲဖက် ဆောင်ရွက်ခြင်း', description: 'ဂေဟာ မူဝါဒ၊ ဝန်ထမ်းများ၏ သွားလာလှုပ်ရှားမှု နားလည်ခြင်း', guidePoint: 'ပြုစုစောင့်ရှောက်မှု အဖွဲ့နှင့် ပူးပေါင်းဆောင်ရွက်ရန် လုပ်ငန်းစဉ် နားလည်စေပါ။' },
+                    'nb_1_2': { title: 'Vital တိုင်းတာခြင်းနှင့် ပုံမှန် ကုသမှုများ', description: 'နံနက်ပိုင်း Vital တိုင်းတာခြင်း၊ ကုသမှုများ၊ ဆရာဝန်နှင့် ပူးပေါင်းဆောင်ရွက်ခြင်း', guidePoint: 'တိုင်းတာမှု အစဉ်လိုက်နှင့် ကုသမှု အချိန်များကို စံနှုန်းသတ်မှတ်ပါ။' },
+                    'nb_1_3': { title: 'ဆေးဝါး ပြင်ဆင်ခြင်းနှင့် စစ်ဆေးခြင်း', description: 'ဆေးလှည်း ပြင်ဆင်ခြင်း၊ ဆေးသောက်ပြီးနောက် စစ်ဆေးသည့် စည်းကမ်းများ', guidePoint: 'ဆေးမှားယွင်းမှု မရှိစေရန် စစ်ဆေးရေး စနစ်ကို သေချာစေပါ။' },
+                    'nb_2_1': { title: 'သက်ကြီးရွယ်အို သီးသန့် Physical Assessment', description: 'ရေဓာတ်ခမ်းခြောက်ခြင်း၊ ဝမ်းချုပ်ခြင်း၊ အရေပြား ပြဿနာများ ကြည့်ရှုခြင်း', guidePoint: 'ပုံမှန်မဟုတ်သော အပြောင်းအလဲများကို သတိပြုမိရန် သင်ကြားပေးပါ။' },
+                    'nb_2_2': { title: 'ဆေးဝါး စီမံခန့်ခွဲခြင်းနှင့် ဆုံးဖြတ်ခြင်း', description: 'ဆေးဝါး မှားယွင်းမှု ကာကွယ်ခြင်း၊ လိုအပ်သလို သောက်ရသော ဆေးဝါးများ ဆုံးဖြတ်ခြင်း', guidePoint: 'ညွှန်ကြားချက်အတိုင်း သင့်လျော်စွာ အသုံးပြုရန် မျှဝေပါ။' },
+                    'nb_3_1': { title: 'အရေးပေါ် တုံ့ပြန်မှု လေ့ကျင့်ခြင်း', description: 'အရေးပေါ် အခြေအနေ လုပ်ထုံးလုပ်နည်းနှင့် လူနာတင်ယာဉ် ခေါ်ဆိုမှု ဆုံးဖြတ်ခြင်း', guidePoint: 'အရေးပေါ် အဖွဲ့သို့ သတင်းပို့ ရေးသားချက် လေ့ကျင့်ပေးပါ။' },
+                    'nb_3_2': { title: 'On-Call ပြင်ဆင်ခြင်းနှင့် နောက်ဆုံး စစ်ဆေးခြင်း', description: 'ညဘက် ဖုန်း ညွှန်ကြားချက် လေ့ကျင့်ခြင်းနှင့် အကဲဖြတ်ခြင်း', guidePoint: 'ဖုန်းဖြင့် တိကျစွာ အခြေအနေ နားထောင်ပြီး ညွှန်ကြားနည်း သင်ကြားပေးပါ။' },
+
+                    // 看護師：経験者コース
+                    'ne_1_1': { title: 'ဂေဟာ နာစ့်အဖြစ် ကျင့်သုံးခြင်းနှင့် စည်းကမ်းများ', description: 'ဂေဟာ မူဝါဒ၊ ပူးပေါင်း ဆရာဝန်များနှင့် ဆေးဆိုင်များ အချိတ်အဆက်', guidePoint: 'ဆေးရုံနှင့် ဂေဟာကြား နာစ့် လုပ်ငန်း ကွာခြားချက်ကို နားလည်စေပါ။' },
+                    'ne_1_2': { title: 'ဆေးဝါး စီမံခန့်ခွဲမှုနှင့် ဆေးခန်းပြသမှု လုပ်ငန်းစဉ်', description: 'ဆေးဝါး ပေးဝေခြင်း၊ ကျန်ရှိ ဆေးဝါး စီမံခြင်း', guidePoint: 'ဆေးဝါး ပြင်ဆင်မှု လုပ်ငန်းစဉ်ကို လုံးဝ တတ်မြောက်စေပါ။' },
+                    'ne_2_1': { title: '«ဆေးရုံ မတက်စေသော ပြုစုစောင့်ရှောက်မှု» နှင့် BPSD', description: 'အပြောင်းအလဲများ စောစီးစွာ တွေ့ရှိခြင်း၊ BPSD ပူးပေါင်းဆောင်ရွက်ခြင်း', guidePoint: 'နေထိုင်သူများ၏ QOL ကို ထိန်းသိမ်းသော ပြုစုစောင့်ရှောက်မှု သင်ကြားပေးပါ။' },
+                    'ne_2_2': { title: 'SBAR အစီရင်ခံစာနှင့် On-Call တွဲဖက် လေ့ကျင့်ခြင်း', description: 'ဆရာဝန်သို့ SBAR အစီရင်ခံခြင်း၊ ညဘက် On-Call ဖုန်း ဆုံးဖြတ်ချက်', guidePoint: 'လိုတိုရှင်း တိကျသော SBAR တင်ပြချက်ကို စစ်ဆေးပါ။' },
+                    'ne_3_1': { title: 'Terminal Care နှင့် ဆုံးဖြတ်ချက် ကူညီမှု', description: 'DNAR အခြေအနေ စစ်ဆေးခြင်း၊ မိသားစုများ၏ ဆန္ဒ စစ်ဆေးခြင်း', guidePoint: 'မိသားစုများ၏ ခံစားချက်ကို စာနာသော ပြုစုစောင့်ရှောက်မှု ဦးဆောင်စေပါ။' },
+                    'ne_3_2': { title: 'On-Call လုံးဝ မိမိကိုယ်တိုင် ဆောင်ရွက်နိုင်ခြင်း', description: 'ညဘက် မိမိကိုယ်တိုင် ဆုံးဖြတ် ဆောင်ရွက်နိုင်ခြင်း', guidePoint: 'နောက်ဆုံး သုံးသပ်ချက်နှင့် On-Call စတင်မှုကို အတည်ပြုပါ။' }
+                };
+
+                const getItemTitle = (item) => {
+                    if (currentLang.value === 'my' && curriculumDictMY[item.id]) {
+                        return curriculumDictMY[item.id].title;
+                    }
+                    return item.title;
+                };
+
+                const getItemDesc = (item) => {
+                    if (currentLang.value === 'my' && curriculumDictMY[item.id]) {
+                        return curriculumDictMY[item.id].description;
+                    }
+                    return item.description;
+                };
+
+                const getItemGuide = (item) => {
+                    if (!item) return '';
+                    if (currentLang.value === 'my' && curriculumDictMY[item.id]) {
+                        return curriculumDictMY[item.id].guidePoint;
+                    }
+                    return item.guidePoint || item.description;
+                };
+
+                // Comment Translation Logic
+                const translatingCommentId = ref(null);
+                const translateComment = async (comment) => {
+                    if (!comment || !comment.content) return;
+                    translatingCommentId.value = comment.id;
+                    try {
+                        let resultText = '';
+                        if (gasApiUrl.value) {
+                            try {
+                                const resp = await fetch(`${gasApiUrl.value}?action=translate&text=${encodeURIComponent(comment.content)}&from=my&to=ja`);
+                                const data = await resp.json();
+                                if (data && data.status === 'success' && data.translatedText) {
+                                    resultText = data.translatedText;
+                                }
+                            } catch(gasErr) {
+                                console.warn('GAS translate failed, trying fallback:', gasErr);
+                            }
+                        }
+
+                        if (!resultText) {
+                            const fallbackUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(comment.content)}&langpair=my|ja`;
+                            const fbResp = await fetch(fallbackUrl);
+                            const fbData = await fbResp.json();
+                            if (fbData && fbData.responseData && fbData.responseData.translatedText) {
+                                resultText = fbData.responseData.translatedText;
+                            }
+                        }
+
+                        if (resultText) {
+                            comment.translatedContent = resultText;
+                            autoSaveDebounce();
+                        } else {
+                            alert('翻訳処理を取得できませんでした。ネットワーク接続をご確認ください。');
+                        }
+                    } catch (err) {
+                        console.error('Translation error:', err);
+                        alert('翻訳処理に失敗しました。');
+                    } finally {
+                        translatingCommentId.value = null;
+                    }
+                };
+
+                // Save & Sync State (DEFAULT_GAS_URL for built-in mobile auto-sync)
+                const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwDZWG19AT8IxcCXZmGysq-NhGoVbJbPD4qY5_M9Y_tTJkIO2DMkbfloJ6eDITkBuRW/exec';
+                const initialGasUrl = localStorage.getItem('kusunoki_gas_url') || DEFAULT_GAS_URL;
+                const gasUrlInput = ref(initialGasUrl);
+                const gasApiUrl = computed(() => {
+                    return gasUrlInput.value.trim() || DEFAULT_GAS_URL;
+                });
+                const saveStatus = ref('saved'); // 'saved', 'unsaved', 'saving', 'error'
+                const isSaving = ref(false);
+                const isLoading = ref(false);
+                const lastSavedTime = ref(localStorage.getItem('kusunoki_last_save') || '');
+
+                // Split Comment Form Inputs
+                const rookieCommentInput = ref('');
+                const trainerCommentInput = ref('');
+
+                // Helper: Date Adder
+                const addDays = (dateStr, days) => {
+                    if (!dateStr) return '';
+                    const d = new Date(dateStr);
+                    if (isNaN(d.getTime())) return '';
+                    d.setDate(d.getDate() + days);
+                    return d.toISOString().split('T')[0];
+                };
+
+                // Editing Staff Template
+                const editingStaff = ref({
+                    id: null,
+                    name: '',
+                    courseKey: 'care_beginner',
+                    workType: '正社員（早番・日勤・夜勤）',
+                    startDate: '2026-04-01',
+                    interviewDates: { w2: '', m1: '', m2: '', m3: '' }
+                });
+
+                // Staff Master Dataset
+                const staffList = ref([
+                    { id: 1, name: '山田 太郎', role: '介護職', courseKey: 'care_beginner', courseName: '未経験者コース', workType: '正社員（早番・日勤・夜勤）', startDate: '2026-04-01', interviewDates: { w2: '2026-04-15', m1: '2026-04-30', m2: '2026-05-31', m3: '2026-06-30' } },
+                    { id: 2, name: '佐藤 花子', role: '介護職', courseKey: 'care_experienced', courseName: '経験者コース', workType: '正社員（早番・日勤・夜勤）', startDate: '2026-03-15', interviewDates: { w2: '2026-03-22', m1: '2026-04-15', m2: '2026-05-15', m3: '2026-06-15' } },
+                    { id: 3, name: '鈴木 美咲', role: '看護師', courseKey: 'nurse_beginner', courseName: '未経験者コース', workType: '正社員（早番・日勤・夜勤）', startDate: '2026-04-01', interviewDates: { w2: '2026-04-15', m1: '2026-04-30', m2: '2026-05-31', m3: '2026-06-30' } },
+                    { id: 4, name: '加藤 由美', role: '看護師', courseKey: 'nurse_experienced', courseName: '経験者コース', workType: '正社員（早番・日勤・夜勤）', startDate: '2026-02-01', interviewDates: { w2: '2026-02-08', m1: '2026-02-28', m2: '2026-03-31', m3: '2026-04-30' } },
+                    { id: 5, name: '田中 次郎', role: '介護職', courseKey: 'care_beginner', courseName: '未経験者コース', workType: 'パート（日勤のみ）', startDate: '2026-04-01', interviewDates: { w2: '2026-04-15', m1: '2026-04-30', m2: '2026-05-31', m3: '2026-06-30' } }
+                ]);
+
+                // Checkbox store: { `${staffId}_${itemId}_${type}`: boolean }
+                const checkStore = ref({});
+
+                // Private comments store
+                const commentsStore = ref([
+                    { id: 1, staffId: 1, authorType: '新人本音', content: '移乗介助の際、足の位置決めとタイミング合わせがまだ少し不安です。', date: '2026/04/05 17:30' },
+                    { id: 2, staffId: 1, authorType: '指導者申送り', content: '声掛けは大変丁寧。明日の日勤同行時にスライディング動作の浅座りを重点的に練習予定。', date: '2026/04/05 18:00' }
+                ]);
+
+                // Focus topics store: { `${staffId}_${month}`: string }
+                const focusTopicsStore = ref({
+                    '1_1': '移乗介助時の足の位置決めと、事前・実施時の声掛けタイミング徹底'
+                });
+
+                // Custom items store: { `${staffId}_${month}`: Array of custom item objects }
+                const customItemsStore = ref({});
+                const showAddCustomForm = ref(false);
+                const newCustomTitle = ref('');
+                const newCustomDesc = ref('');
+
+                // Item notes store: { `${staffId}_${itemId}`: string }
+                const itemNotesStore = ref({});
+                const editingNoteItemId = ref(null);
+                const tempNoteText = ref('');
+
+                const getItemNote = (itemId) => {
+                    const key = `${selectedStaffId.value}_${itemId}`;
+                    return itemNotesStore.value[key] || '';
+                };
+
+                const openNoteEditor = (itemId) => {
+                    editingNoteItemId.value = itemId;
+                    tempNoteText.value = getItemNote(itemId);
+                };
+                const updateItemNote = (itemId, val) => {
+                    const key = `${selectedStaffId.value}_${itemId}`;
+                    if (val && val.trim()) {
+                        itemNotesStore.value[key] = val;
+                    } else {
+                        delete itemNotesStore.value[key];
+                    }
+                    autoSaveDebounce();
+                };
+
+                // Instructor schedule store: { `${staffId}_${dateKey}`: string }
+                const instructorScheduleStore = ref({
+                    '1_2026-04-01': '佐藤 介護士',
+                    '1_2026-04-02': '鈴木 介護士',
+                    '1_2026-04-03': '高橋 介護士'
+                });
+                const showInstructorScheduleModal = ref(false);
+                const scheduleActiveMonth = ref(1);
+                const isEditingTodayInstructor = ref(false);
+
+                const getTodayStr = () => {
+                    const d = new Date();
+                    const yyyy = d.getFullYear();
+                    const mm = String(d.getMonth() + 1).padStart(2, '0');
+                    const dd = String(d.getDate()).padStart(2, '0');
+                    return `${yyyy}-${mm}-${dd}`;
+                };
+
+                const getTodayInstructorName = () => {
+                    if (!selectedStaffId.value) return '';
+                    const todayStr = getTodayStr();
+                    const key = `${selectedStaffId.value}_${todayStr}`;
+                    if (instructorScheduleStore.value[key]) {
+                        return instructorScheduleStore.value[key];
+                    }
+                    const activeKey = `${selectedStaffId.value}_active_today`;
+                    return instructorScheduleStore.value[activeKey] || '';
+                };
+
+                const setTodayInstructorName = (nameVal) => {
+                    if (!selectedStaffId.value) return;
+                    const todayStr = getTodayStr();
+                    const key = `${selectedStaffId.value}_${todayStr}`;
+                    const activeKey = `${selectedStaffId.value}_active_today`;
+                    instructorScheduleStore.value[key] = nameVal;
+                    instructorScheduleStore.value[activeKey] = nameVal;
+                    autoSaveDebounce();
+                };
+
+                const getInstructorForDate = (dateStr) => {
+                    if (!selectedStaffId.value || !dateStr) return '';
+                    const key = `${selectedStaffId.value}_${dateStr}`;
+                    return instructorScheduleStore.value[key] || '';
+                };
+
+                const setInstructorForDate = (dateStr, nameVal) => {
+                    if (!selectedStaffId.value || !dateStr) return;
+                    const key = `${selectedStaffId.value}_${dateStr}`;
+                    if (nameVal && nameVal.trim()) {
+                        instructorScheduleStore.value[key] = nameVal.trim();
+                    } else {
+                        delete instructorScheduleStore.value[key];
+                    }
+                    autoSaveDebounce();
+                };
+
+                const formattedToday = computed(() => {
+                    const d = new Date();
+                    const yyyy = d.getFullYear();
+                    const mm = d.getMonth() + 1;
+                    const dd = d.getDate();
+                    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+                    return `${yyyy}年${mm}月${dd}日 (${dayOfWeek})`;
+                });
+
+                const pendingModalToOpen = ref(null);
+
+                const openAdminAuthModal = () => {
+                    showAdminAuthModal.value = true;
+                };
+
+                const verifyAdminPasscode = () => {
+                    if (adminPasscode.value === '147123') {
+                        isAdmin.value = true;
+                        showAdminAuthModal.value = false;
+                        adminPasscode.value = '';
+                        if (pendingModalToOpen.value === 'instructorSchedule') {
+                            scheduleActiveMonth.value = activeMonth.value;
+                            showInstructorScheduleModal.value = true;
+                            pendingModalToOpen.value = null;
+                        }
+                    } else {
+                        alert('パスコードが正しくありません。');
+                    }
+                };
+
+                const openInstructorScheduleModal = () => {
+                    if (!isAdmin.value) {
+                        pendingModalToOpen.value = 'instructorSchedule';
+                        openAdminAuthModal();
+                        return;
+                    }
+                    scheduleActiveMonth.value = activeMonth.value;
+                    showInstructorScheduleModal.value = true;
+                };
+
+                // Helper: Generate list of dates for specified scheduleActiveMonth of current staff
+                const getMonthDates = computed(() => {
+                    if (!currentStaff.value || !currentStaff.value.startDate) return [];
+                    const baseDate = new Date(currentStaff.value.startDate);
+                    if (isNaN(baseDate.getTime())) return [];
+
+                    const targetMonth = scheduleActiveMonth.value || 1;
+                    const offsetDays = (targetMonth - 1) * 30;
+                    const dates = [];
+                    for (let i = 0; i < 30; i++) {
+                        const d = new Date(baseDate);
+                        d.setDate(d.getDate() + offsetDays + i);
+                        const yyyy = d.getFullYear();
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const dd = String(d.getDate()).padStart(2, '0');
+                        const dateStr = `${yyyy}-${mm}-${dd}`;
+                        const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+                        dates.push({
+                            dayNum: (targetMonth - 1) * 30 + i + 1,
+                            dateStr: dateStr,
+                            displayLabel: `${mm}/${dd} (${dayOfWeek})`,
+                            isWeekend: d.getDay() === 0 || d.getDay() === 6
+                        });
+                    }
+                    return dates;
+                });
+
+                const isEditingFocusTopic = ref(false);
+                const tempFocusTopic = ref('');
+
+                const currentFocusTopic = computed(() => {
+                    if (!selectedStaffId.value) return '';
+                    const sId = selectedStaffId.value;
+                    const m = activeMonth.value;
+                    
+                    const k1 = `${sId}_${m}`;
+                    const k2 = `${sId}_${m}_ja`;
+                    const k3 = `${m}`;
+                    const k4 = `${m}_ja`;
+                    
+                    return focusTopicsStore.value[k1] || 
+                           focusTopicsStore.value[k2] || 
+                           focusTopicsStore.value[k3] || 
+                           focusTopicsStore.value[k4] || 
+                           '';
+                });
+
+                const startEditFocusTopic = () => {
+                    tempFocusTopic.value = currentFocusTopic.value;
+                    isEditingFocusTopic.value = true;
+                };
+
+                const saveFocusTopic = () => {
+                    const key = `${selectedStaffId.value}_${activeMonth.value}`;
+                    const val = tempFocusTopic.value.trim();
+                    if (val) {
+                        focusTopicsStore.value[key] = val;
+                    } else {
+                        delete focusTopicsStore.value[key];
+                        delete focusTopicsStore.value[`${key}_ja`];
+                    }
+                    isEditingFocusTopic.value = false;
+                    autoSaveDebounce();
+                };
+
+                const updateFocusTopicForActiveMonth = (val) => {
+                    if (!selectedStaffId.value) return;
+                    const key = `${selectedStaffId.value}_${activeMonth.value}`;
+                    if (val && val.trim()) {
+                        focusTopicsStore.value[key] = val.trim();
+                    } else {
+                        delete focusTopicsStore.value[key];
+                        delete focusTopicsStore.value[`${key}_ja`];
+                    }
+                    autoSaveDebounce();
+                };
+
+                // Watch staff or month switch to reset edit mode & forms
+                watch([selectedStaffId, activeMonth], () => {
+                    isEditingFocusTopic.value = false;
+                    showAddCustomForm.value = false;
+                    editingNoteItemId.value = null;
+                    isEditingTodayInstructor.value = false;
+                });
+
+                // --- Storage & GAS Sync Functions ---
+                const saveToLocalStorage = () => {
+                    try {
+                        localStorage.setItem('kusunoki_staffList', JSON.stringify(staffList.value));
+                        localStorage.setItem('kusunoki_checkStore', JSON.stringify(checkStore.value));
+                        localStorage.setItem('kusunoki_commentsStore', JSON.stringify(commentsStore.value));
+                        localStorage.setItem('kusunoki_focusTopicsStore', JSON.stringify(focusTopicsStore.value));
+                        localStorage.setItem('kusunoki_customItemsStore', JSON.stringify(customItemsStore.value));
+                        localStorage.setItem('kusunoki_itemNotesStore', JSON.stringify(itemNotesStore.value));
+                        localStorage.setItem('kusunoki_instructorScheduleStore', JSON.stringify(instructorScheduleStore.value));
+                        const nowStr = new Date().toLocaleString('ja-JP');
+                        lastSavedTime.value = nowStr;
+                        localStorage.setItem('kusunoki_last_save', nowStr);
+                    } catch (e) {
+                        console.error('LocalStorage Save Failed:', e);
+                    }
+                };
+
+                const loadFromLocalStorage = () => {
+                    try {
+                        const localStaff = localStorage.getItem('kusunoki_staffList');
+                        const localCheck = localStorage.getItem('kusunoki_checkStore');
+                        const localComments = localStorage.getItem('kusunoki_commentsStore');
+                        const localFocus = localStorage.getItem('kusunoki_focusTopicsStore');
+                        const localCustom = localStorage.getItem('kusunoki_customItemsStore');
+                        const localNotes = localStorage.getItem('kusunoki_itemNotesStore');
+                        const localSchedule = localStorage.getItem('kusunoki_instructorScheduleStore');
+                        if (localStaff) staffList.value = JSON.parse(localStaff);
+                        if (localCheck) checkStore.value = JSON.parse(localCheck);
+                        if (localComments) commentsStore.value = JSON.parse(localComments);
+                        if (localFocus) focusTopicsStore.value = JSON.parse(localFocus);
+                        if (localCustom) customItemsStore.value = JSON.parse(localCustom);
+                        if (localNotes) itemNotesStore.value = JSON.parse(localNotes);
+                        if (localSchedule) instructorScheduleStore.value = JSON.parse(localSchedule);
+                    } catch (e) {
+                        console.error('LocalStorage Load Failed:', e);
+                    }
+                };
+
+                let saveTimer = null;
+                const saveDataToGAS = async (isManual = false) => {
+                    saveToLocalStorage(); // Always keep local state fresh
+                    
+                    if (!gasApiUrl.value) {
+                        saveStatus.value = 'saved';
+                        if (isManual) alert('Local Storageに保存されました。（※クラウド共有を行うには設定からGAS URLを入力してください）');
+                        return;
+                    }
+
+                    saveStatus.value = 'saving';
+                    isSaving.value = true;
+
+                    try {
+                        const payload = {
+                            action: 'saveAll',
+                            staffList: staffList.value,
+                            checkStore: checkStore.value,
+                            commentsStore: commentsStore.value,
+                            focusTopicsStore: focusTopicsStore.value,
+                            customItemsStore: customItemsStore.value,
+                            itemNotesStore: itemNotesStore.value,
+                            instructorScheduleStore: instructorScheduleStore.value
+                        };
+
+                        const response = await fetch(gasApiUrl.value, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        const res = await response.json();
+                        if (res.status === 'success') {
+                            saveStatus.value = 'saved';
+                            if (isManual) alert('Googleスプレッドシートへ正常に保存されました！');
+                        } else {
+                            throw new Error(res.message || 'Save failed');
+                        }
+                    } catch (err) {
+                        console.error('GAS Save Error:', err);
+                        saveStatus.value = 'error';
+                        if (isManual) alert('GASへの保存に失敗しました。接続設定を確認してください。');
+                    } finally {
+                        isSaving.value = false;
+                    }
+                };
+
+                const autoSaveDebounce = () => {
+                    saveStatus.value = 'unsaved';
+                    if (saveTimer) clearTimeout(saveTimer);
+                    saveTimer = setTimeout(() => {
+                        saveDataToGAS(false);
+                    }, 1200);
+                };
+
+                const loadDataFromGAS = async () => {
+                    if (!gasApiUrl.value) {
+                        loadFromLocalStorage();
+                        return;
+                    }
+                    isLoading.value = true;
+                    try {
+                        const res = await fetch(`${gasApiUrl.value}?action=getAll`);
+                        const data = await res.json();
+                        if (data.status === 'success' && data.data) {
+                            if (data.data.staffList && Array.isArray(data.data.staffList)) {
+                                staffList.value = data.data.staffList;
+                            }
+                            if (data.data.checkStore) {
+                                checkStore.value = data.data.checkStore;
+                            }
+                            if (data.data.commentsStore && Array.isArray(data.data.commentsStore)) {
+                                commentsStore.value = data.data.commentsStore;
+                            }
+                            if (data.data.focusTopicsStore) {
+                                focusTopicsStore.value = data.data.focusTopicsStore;
+                            }
+                            if (data.data.customItemsStore) {
+                                customItemsStore.value = data.data.customItemsStore;
+                            }
+                            if (data.data.itemNotesStore) {
+                                itemNotesStore.value = data.data.itemNotesStore;
+                            }
+                            if (data.data.instructorScheduleStore) {
+                                instructorScheduleStore.value = data.data.instructorScheduleStore;
+                            }
+                            saveToLocalStorage();
+                            saveStatus.value = 'saved';
+                            if (currentStaff.value) {
+                                activeMonth.value = calculateDefaultMonth(currentStaff.value);
+                            }
+                        }
+                    } catch (err) {
+                        console.error('GAS Load Error:', err);
+                        loadFromLocalStorage();
+                        if (currentStaff.value) {
+                            activeMonth.value = calculateDefaultMonth(currentStaff.value);
+                        }
+                    } finally {
+                        isLoading.value = false;
+                    }
+                };
+
+
+                const saveGasUrl = () => {
+                    localStorage.setItem('kusunoki_gas_url', gasUrlInput.value.trim());
+                    showConfigModal.value = false;
+                    if (gasApiUrl.value) {
+                        loadDataFromGAS();
+                    }
+                };
+
+                onMounted(() => {
+                    loadFromLocalStorage();
+                    if (gasApiUrl.value) {
+                        loadDataFromGAS();
+                    }
+                });
+
+                const masterCurriculums = {
+                    // 1. 介護職：未経験者コース
+                    care_beginner: {
+                        months: {
+                            1: {
+                                title: '環境適応と基礎の習得',
+                                goal: '施設の流れを理解し、顔と名前を覚える。基本的な配慮・食前準備を指導のもと実施できる。',
+                                interview: '2週目 ＆ 月末面談',
+                                items: [
+                                    { id: 'cb_1_1', title: 'オリエンテーション', description: '施設理念、就業規則、防災、感染症対策、虐待防止の理解', guidePoint: '施設の理念と安全第一の意識を根拠と共に共有してください。' },
+                                    { id: 'cb_1_2', title: '環境理解・備品・操作', description: '備品の場所、ナースコール対応規則、車椅子の安全操作', guidePoint: 'ブレーキ徹底とナースコール優先順位の立ち振る舞いを指導。' },
+                                    { id: 'cb_1_3', title: 'コミュニケーション・接遇', description: '入居者様の顔と名前の一致、丁寧な言葉遣いと挨拶', guidePoint: '目線を合わせてお名前でお呼びする接遇の重要性を説明。' },
+                                    { id: 'cb_1_4', title: '配膳ルール・食前準備', description: '配膳・下膳の手順、お茶・おしぼり準備、見守りのポイント', guidePoint: '配膳順序や食前お茶準備、下膳時の衛生手順をしっかり伝えます。' },
+                                    { id: 'cb_1_5', title: 'プライバシー保護・マナー', description: '露出を最小限にする配慮、居室訪問時の声掛けとマナー', guidePoint: '介護時の露出防止・カーテン使用・プライバシー尊重の根拠を解説。' }
+                                ]
+                            },
+                            2: {
+                                title: '実践と個別性の理解',
+                                goal: '手順書通りに身体ケアができ、入居者様ごとの特徴（リスクや好み）を意識し始める。',
+                                interview: '月末面談',
+                                items: [
+                                    { id: 'cb_2_1', title: '移乗・移動介助', description: 'ボディメカニクスを活かした安全な介助、リフト使用', guidePoint: '自分と新人の体を痛めない力学（ボディメカニクス）を解説。' },
+                                    { id: 'cb_2_2', title: '入浴介助', description: 'お湯加減の確認、皮膚状態の観察、着脱・洗身介助', guidePoint: 'お湯加減は必ず本人に確認。皮膚剥離や発疹の早期発見観察。' },
+                                    { id: 'cb_2_5', title: '食事介助・誤嚥防止', description: '誤嚥防止姿勢、一口量の調整、実際の食事介助・見守り', guidePoint: 'なぜ顎を引く姿勢にするのか（誤嚥防止の構造）と観察点を指導。' },
+                                    { id: 'cb_2_6', title: '排泄介助・おむつ交換', description: 'トイレ誘導の手順、パッド・おむつ交換、陰部洗浄', guidePoint: '手際よく丁寧に実施する手順と、感染防止の衛生手技を解説。' },
+                                    { id: 'cb_2_3', title: '介護記録の入力', description: 'タブレット/PC入力、事実に基づいた客観的記述', guidePoint: '主観（〜だと思う）ではなく客観的事実を記録する癖を指導。' },
+                                    { id: 'cb_2_4', title: '夜勤準備・夜間ルール', description: '夜間の定時巡回、施錠確認、就寝・起床介助の把握', isNight: true, guidePoint: '静音動作とライトの当て方など夜間特有の配慮を共有。' }
+                                ]
+                            },
+                            3: {
+                                title: '自立とチーム連携',
+                                goal: '基本的なルーチン業務を独り立ちし、異変の報告が適切にできる。',
+                                interview: '3ヶ月総括面談',
+                                items: [
+                                    { id: 'cb_3_1', title: '日勤業務の自立', description: '優先順位を考えたタイムスケジュール・業務管理', guidePoint: '突発対応時の優先度の組み立て方をサポート。' },
+                                    { id: 'cb_3_2', title: '夜勤の独り立ち', description: '緊急時連絡体制（オンコール）の理解と夜勤実践', isNight: true, guidePoint: '急変時の連絡手順と救急箱の場所を最終チェック。' },
+                                    { id: 'cb_3_3', title: '多職種連携（ホウレンソウ）', description: '看護師へのバイタル・異変報告、ケアマネへの気づき共有', guidePoint: 'SBAR（状況・背景・アセスメント・提案）での報告練習。' },
+                                    { id: 'cb_3_4', title: 'リスク管理・ヒヤリハット', description: 'ヒヤリハット報告書の作成、事故防止対策の徹底', guidePoint: '責めるためではなく再発防止のための報告書であることを理解させる。' }
+                                ]
+                            }
+                        }
+                    },
+
+                    // 2. 介護職：経験者コース
+                    care_experienced: {
+                        months: {
+                            1: {
+                                title: 'ルール習得と環境適応',
+                                goal: '施設特有のルール、備品配置、記録ソフト、リスク管理を早期習得する。',
+                                interview: '1週目 ＆ 月末面談',
+                                items: [
+                                    { id: 'ce_1_1', title: 'オリエンテーション・緊急体制', description: '施設理念、事故報告手順、緊急連絡網（オンコール）', guidePoint: '前職への敬意を払い「当施設のルール」へアジャストを支援。' },
+                                    { id: 'ce_1_2', title: '介護ソフト・記録ルール', description: '記録ソフトの入力方法、申送り事項の確認フロー', guidePoint: 'ソフトの操作癖をリセットし当施設の入力ルールを共有。' },
+                                    { id: 'ce_1_3', title: '備品・福祉用具の把握', description: '備品保管場所、各種福祉用具の種類と取り扱い確認', guidePoint: '前職との器具の違いを重点的に確認。' },
+                                    { id: 'ce_1_4', title: '短期間シャドーイング', description: '基本技術の確認（手技のクセを調整し当施設標準に合わせる）', guidePoint: '否定せず「当施設では安全のためこう統一しています」と説明。' }
+                                ]
+                            },
+                            2: {
+                                title: '実践と役割の明確化',
+                                goal: '夜勤導入、行事・レク参画、個別ケアの提案を行う。',
+                                interview: '月末面談',
+                                items: [
+                                    { id: 'ce_2_1', title: '個別ケア・アセスメント', description: '入居者様一人ひとりのアセスメント・生活習慣の把握', guidePoint: '個別性の高い好みやリスクの把握を促す。' },
+                                    { id: 'ce_2_2', title: '早期夜勤導入', description: '1回程度の同行後、問題なければ夜勤独り立ち', isNight: true, guidePoint: '経験を尊重しつつ夜間の当施設特有フローの漏れをチェック。' },
+                                    { id: 'ce_2_3', title: '接遇・ご家族対応', description: 'ご家族・来客・業者への丁寧な対応ルール', guidePoint: '当施設の顔としての丁寧な言動の定着。' }
+                                ]
+                            },
+                            3: {
+                                title: '自立とチーム貢献',
+                                goal: '業務の完全自立、後輩への助言、多職種連携をリードする。',
+                                interview: '3ヶ月総括面談',
+                                items: [
+                                    { id: 'ce_3_1', title: '業務の完全自立', description: 'タイムスケジュールの自己管理と突発事態への対応', guidePoint: '自立動作を確認し免除可能項目を整理。' },
+                                    { id: 'ce_3_2', title: '改善提案・チームフォロー', description: '経験者視点での効率化提案、未経験者の相談役', guidePoint: 'チームの頼れる存在としての立ち振る舞いを期待。' }
+                                ]
+                            }
+                        }
+                    },
+
+                    // 3. 看護師：未経験者コース
+                    nurse_beginner: {
+                        months: {
+                            1: {
+                                title: '環境適応と施設の「流れ」把握',
+                                goal: '施設のルーティンを理解し、入居者一人ひとりの顔と疾患（ベースライン）を一致させる。',
+                                interview: '月末面談',
+                                items: [
+                                    { id: 'nb_1_1', title: 'オリエンテーション・介護同行', description: '施設理念、介護スタッフの動き（食事・排泄介助の同行）', guidePoint: '介護職とのチームワークを育むため介護業務の流れも把握。' },
+                                    { id: 'nb_1_2', title: 'バイタル・ルーティン処置', description: '午前バイタル測定、処置、嘱託医との連携・往診準備', guidePoint: '入浴優先の測定順序と処置タイミングの標準化。' },
+                                    { id: 'nb_1_3', title: '配薬準備と服薬確認', description: '薬カート準備、1F医務室での服薬後袋確認ルール', guidePoint: '飲み残しや誤薬防止のダブルチェック体制を徹底。' }
+                                ]
+                            },
+                            2: {
+                                title: 'アセスメント能力の向上',
+                                goal: '入居者の「いつもと違う」に気づき、看護判断の根拠を持てるようになる。',
+                                interview: '月末面談',
+                                items: [
+                                    { id: 'nb_2_1', title: '高齢者特有のフィジカルアセスメント', description: '脱水、便秘、不顕性誤嚥、皮膚トラブル等の観察ポイント', guidePoint: 'ベースラインからの微細な変化に気づく観察眼を指導。' },
+                                    { id: 'nb_2_2', title: '薬剤管理・頓服判断', description: '配薬ミス防止、頓服薬（下剤・鎮痛剤等）の使用判断', guidePoint: '指示書に基づく適切な使用判断の根拠を共有。' }
+                                ]
+                            },
+                            3: {
+                                title: '自立と緊急時対応',
+                                goal: '夜間オンコールや緊急時対応をシミュレーションし、主体的に動けるようになる。',
+                                interview: '3ヶ月総括面談',
+                                items: [
+                                    { id: 'nb_3_1', title: '緊急時対応シミュレーション', description: '急変時（誤嚥・心停止・転倒）フロー、救急搬送判断', isNight: true, guidePoint: '救急隊への申し送り事項の要約練習。' },
+                                    { id: 'nb_3_2', title: 'オンコール準備・最終確認', description: '夜間電話指示の練習、最終自立判定', isNight: true, guidePoint: '電話での的確な状況聞き取りと指示出しを指導。' }
+                                ]
+                            }
+                        }
+                    },
+
+                    // 4. 看護師：経験者コース
+                    nurse_experienced: {
+                        months: {
+                            1: {
+                                title: '施設看護への適応とルール把握',
+                                goal: '施設固有のルーティンと入居者のベースライン（平常時）を把握する。',
+                                interview: '月末面談',
+                                items: [
+                                    { id: 'ne_1_1', title: '契約・協力医システムの把握', description: '施設理念、嘱託医（櫛田病院等）・薬局との連携構造', guidePoint: '病院と施設の看護の違い（生活の場を支える看護）を理解。' },
+                                    { id: 'ne_1_2', title: '薬剤管理・受診フロー', description: '配薬、残薬管理、臨時薬、往診時の準備・介助', guidePoint: '月曜〜土曜の薬設置・往診フローの完全習得。' }
+                                ]
+                            },
+                            2: {
+                                title: 'アセスメントの自立とオンコール準備',
+                                goal: '施設特有の判断基準（受診の要否等）を理解し自立して対応できる。',
+                                interview: '月末面談',
+                                items: [
+                                    { id: 'ne_2_1', title: '「入院させない看護」・BPSD対応', description: '微細変化の早期発見、認知症BPSDへの多職種連携', guidePoint: '過度な安静指示を避けQOLを保つ介入を指導。' },
+                                    { id: 'ne_2_2', title: 'SBAR報告・オンコール同行', description: '主治医へのSBAR報告、夜間オンコールの電話判断練習', isNight: true, guidePoint: '簡潔で正確なSBARプレゼンテーションの確認。' }
+                                ]
+                            },
+                            3: {
+                                title: 'リーダーシップと看取りの実践',
+                                goal: '多職種連携の要となり、看取り期にも主体的に関わる。',
+                                interview: '3ヶ月総括面談',
+                                items: [
+                                    { id: 'ne_3_1', title: 'ターミナルケア・意思決定支援', description: 'DNARの確認状況、ご家族との意向確認プロセス', guidePoint: 'ご家族の気持ちにより添うケアの主導。' },
+                                    { id: 'ne_3_2', title: 'オンコール完全自立', description: '単独での夜間判断・対応の完全自立', isNight: true, guidePoint: '最終振り返りとオンコール担当開始の確認。' }
+                                ]
+                            }
+                        }
+                    }
+                };
+
+                const currentStaff = computed(() => {
+                    return staffList.value.find(s => s.id === selectedStaffId.value) || staffList.value[0];
+                });
+
+                const currentCurriculum = computed(() => {
+                    if (!currentStaff.value) return masterCurriculums.care_beginner;
+                    return masterCurriculums[currentStaff.value.courseKey] || masterCurriculums.care_beginner;
+                });
+
+                const isItemExempt = (item) => {
+                    if (!currentStaff.value) return false;
+                    const wt = currentStaff.value.workType;
+                    if (wt === 'パート（日勤のみ）' && item.isNight) return true;
+                    if (wt === '夜勤専従（夜勤のみ）' && !item.isNight) return true;
+                    return false;
+                };
+
+                const isItemTrainerAchieved = (itemId) => {
+                    const key = `${selectedStaffId.value}_${itemId}_trainer`;
+                    return !!checkStore.value[key];
+                };
+
+                const getItemsForMonthRaw = (monthNum) => {
+                    const monthData = currentCurriculum.value.months[monthNum];
+                    const baseItems = monthData ? monthData.items.filter(item => !isItemExempt(item)) : [];
+                    const key = `${selectedStaffId.value}_${monthNum}`;
+                    const customItems = customItemsStore.value[key] || [];
+                    return [...baseItems, ...customItems];
+                };
+
+                const getUnachievedItemsForMonth = (monthNum) => {
+                    const items = getItemsForMonthRaw(monthNum);
+                    return items.filter(item => !isItemTrainerAchieved(item.id));
+                };
+
+                const availableMonths = computed(() => {
+                    const unachieved1 = getUnachievedItemsForMonth(1);
+                    const unachieved2 = getUnachievedItemsForMonth(2);
+                    const unachieved3 = getUnachievedItemsForMonth(3);
+                    
+                    if (unachieved1.length > 0 || unachieved2.length > 0 || unachieved3.length > 0) {
+                        return [1, 2, 3, 4];
+                    }
+                    return [1, 2, 3];
+                });
+
+                // スタッフの進行状況（指導OK完了度および経過日数）に応じた表示月の自動計算
+                const isMonthFullyAchieved = (monthNum) => {
+                    const items = getItemsForMonthRaw(monthNum);
+                    if (!items.length) return false;
+                    return items.every(item => isItemTrainerAchieved(item.id));
+                };
+
+                const calculateDefaultMonth = (staff) => {
+                    if (!staff) return 1;
+
+                    let elapsedDays = 0;
+                    if (staff.startDate) {
+                        const start = new Date(staff.startDate);
+                        const today = new Date();
+                        const diffTime = today - start;
+                        if (!isNaN(diffTime)) {
+                            elapsedDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                        }
+                    }
+
+                    const unachieved1 = getUnachievedItemsForMonth(1);
+                    const unachieved2 = getUnachievedItemsForMonth(2);
+                    const unachieved3 = getUnachievedItemsForMonth(3);
+                    const totalUnachieved = unachieved1.length + unachieved2.length + unachieved3.length;
+
+                    // 1. 3ヶ月目が完了または入社90日以上経過の場合
+                    if (isMonthFullyAchieved(3) || (isMonthFullyAchieved(1) && isMonthFullyAchieved(2) && elapsedDays >= 90)) {
+                        if (totalUnachieved > 0) return 4; // 未達成があれば4ヶ月目（延長）
+                        return 3;
+                    }
+
+                    // 2. 2ヶ月目が完了または入社60日以上経過の場合
+                    if (isMonthFullyAchieved(2) || (isMonthFullyAchieved(1) && elapsedDays >= 60)) {
+                        return 3;
+                    }
+
+                    // 3. 1ヶ月目が完了または入社30日以上経過の場合
+                    if (isMonthFullyAchieved(1) || elapsedDays >= 30) {
+                        return 2;
+                    }
+
+                    return 1;
+                };
+
+                // スタッフ切り替え時・初期表示時に自動的に現在進行月を選択
+                watch(selectedStaffId, () => {
+                    if (currentStaff.value) {
+                        activeMonth.value = calculateDefaultMonth(currentStaff.value);
+                    }
+                }, { immediate: true });
+
+                const currentMonthItems = computed(() => {
+                    const m = activeMonth.value;
+                    const thisMonthRaw = getItemsForMonthRaw(m);
+
+                    if (m === 1) {
+                        return thisMonthRaw;
+                    }
+
+                    if (m === 2) {
+                        const unachieved1 = getUnachievedItemsForMonth(1).map(item => ({
+                            ...item,
+                            carriedOverFrom: 1
+                        }));
+                        return [...thisMonthRaw, ...unachieved1];
+                    }
+
+                    if (m === 3) {
+                        const unachieved1 = getUnachievedItemsForMonth(1).map(item => ({
+                            ...item,
+                            carriedOverFrom: 1
+                        }));
+                        const unachieved2 = getUnachievedItemsForMonth(2).map(item => ({
+                            ...item,
+                            carriedOverFrom: 2
+                        }));
+                        return [...thisMonthRaw, ...unachieved1, ...unachieved2];
+                    }
+
+                    if (m === 4) {
+                        const unachieved1 = getUnachievedItemsForMonth(1).map(item => ({
+                            ...item,
+                            carriedOverFrom: 1
+                        }));
+                        const unachieved2 = getUnachievedItemsForMonth(2).map(item => ({
+                            ...item,
+                            carriedOverFrom: 2
+                        }));
+                        const unachieved3 = getUnachievedItemsForMonth(3).map(item => ({
+                            ...item,
+                            carriedOverFrom: 3
+                        }));
+                        const allUnachieved = [...unachieved1, ...unachieved2, ...unachieved3];
+                        
+                        const uniqueMap = new Map();
+                        allUnachieved.forEach(item => {
+                            if (!uniqueMap.has(item.id)) {
+                                uniqueMap.set(item.id, item);
+                            }
+                        });
+                        return Array.from(uniqueMap.values());
+                    }
+
+                    return thisMonthRaw;
+                });
+
+                const addCustomItem = () => {
+                    if (!newCustomTitle.value.trim()) {
+                        alert('項目名を入力してください。');
+                        return;
+                    }
+                    const key = `${selectedStaffId.value}_${activeMonth.value}`;
+                    if (!customItemsStore.value[key]) {
+                        customItemsStore.value[key] = [];
+                    }
+                    
+                    const newItem = {
+                        id: `custom_${Date.now()}`,
+                        title: newCustomTitle.value.trim(),
+                        description: newCustomDesc.value.trim() || '（手入力追加課題）',
+                        guidePoint: newCustomDesc.value.trim() || '前月の未達成項目・追加課題です。優先して現場指導を行ってください。',
+                        isCustom: true
+                    };
+
+                    customItemsStore.value[key].push(newItem);
+                    newCustomTitle.value = '';
+                    newCustomDesc.value = '';
+                    showAddCustomForm.value = false;
+                    autoSaveDebounce();
+                };
+
+                const deleteCustomItem = (itemId) => {
+                    if (confirm('この追加項目を削除してもよろしいですか？')) {
+                        const key = `${selectedStaffId.value}_${activeMonth.value}`;
+                        if (customItemsStore.value[key]) {
+                            customItemsStore.value[key] = customItemsStore.value[key].filter(item => item.id !== itemId);
+                        }
+                        autoSaveDebounce();
+                    }
+                };
+
+                const staffComments = computed(() => {
+                    return commentsStore.value.filter(c => c.staffId === selectedStaffId.value);
+                });
+
+                const staffRookieComments = computed(() => {
+                    return staffComments.value.filter(c => c.authorType === '新人本音');
+                });
+
+                const staffTrainerComments = computed(() => {
+                    return staffComments.value.filter(c => c.authorType === '指導者申送り');
+                });
+
+                const monthTitlesMY = {
+                    care_beginner: { 1: 'ပတ်ဝန်းကျင်နှင့် အခြေခံများ နှံ့စပ်ခြင်း', 2: 'လက်တွေ့ ဆောင်ရွက်ခြင်းနှင့် တစ်ဦးချင်း လိုအပ်ချက်များ နားလည်ခြင်း', 3: 'မိမိကိုယ်တိုင် ဆောင်ရွက်နိုင်ခြင်းနှင့် အဖွဲ့အစည်း ပူးပေါင်းဆောင်ရွက်မှု' },
+                    care_experienced: { 1: 'စည်းကမ်းများ နှံ့စပ်ခြင်းနှင့် ပတ်ဝန်းကျင် ကျင့်သုံးခြင်း', 2: 'လက်တွေ့ ဆောင်ရွက်ခြင်းနှင့် တာဝန်များ ရှင်းလင်းခြင်း', 3: 'မိမိကိုယ်တိုင် ဆောင်ရွက်နိုင်ခြင်းနှင့် အဖွဲ့အစည်း ကူညီမှု' },
+                    nurse_beginner: { 1: 'ပတ်ဝန်းကျင် ကျင့်သုံးခြင်းနှင့် ဂေဟာ လုပ်ငန်းစဉ် နားလည်ခြင်း', 2: 'ဝေဖန်ဆန်းစစ်မှု စွမ်းရည် တိုးတက်စေခြင်း', 3: 'မိမိကိုယ်တိုင် ဆောင်ရွက်နိုင်ခြင်းနှင့် အရေးပေါ် တုံ့ပြန်မှု' },
+                    nurse_experienced: { 1: 'ဂေဟာ ပြုစုစောင့်ရှောက်မှု ကျင့်သုံးခြင်းနှင့် စည်းကမ်းများ နားလည်ခြင်း', 2: 'ဝေဖန်ဆန်းစစ်မှု မိမိကိုယ်တိုင် ဆောင်ရွက်ခြင်း', 3: 'ခေါင်းဆောင်မှုနှင့် နောက်ဆုံးအဆင့် ပြုစုစောင့်ရှောက်မှု' }
+                };
+
+                const monthGoalsMY = {
+                    care_beginner: {
+                        1: 'ဂေဟာ၏ လုပ်ငန်းစဉ်ကို နားလည်ပြီး မျက်နှာနှင့် အမည်များကို မှတ်မိရန်။ အခြေခံ ပစ္စည်းများ ပြင်ဆင်ခြင်းကို သင်ကြားသူနှင့်အတူ ဆောင်ရွက်နိုင်ရန်။',
+                        2: 'လုပ်ထုံးလုပ်နည်းအတိုင်း ခန္ဓာကိုယ် ပြုစုစောင့်ရှောက်မှု ပြုလုပ်နိုင်ပြီး နေထိုင်သူ တစ်ဦးချင်းစီ၏ ထူးခြားချက်များကို သတိပြုမိရန်။',
+                        3: 'အခြေခံ ပုံမှန် လုပ်ငန်းများကို မိမိကိုယ်တိုင် တာဝန်ယူ ဆောင်ရွက်နိုင်ပြီး အပြောင်းအလဲများကို သင့်လျော်စွာ သတင်းပို့နိုင်ရန်။'
+                    },
+                    care_experienced: {
+                        1: 'ဂေဟာ၏ သီးသန့် စည်းကမ်းများ၊ ပစ္စည်းများ ထားရှိပုံ၊ မှတ်တမ်း ဆော့ဖ်ဝဲနှင့် ဘေးအန္တရာယ် စီမံခန့်ခွဲမှုကို လျှင်မြန်စွာ သင်ယူရန်။',
+                        2: 'ညဂျူတီ စတင်ခြင်း၊ ပွဲလမ်းသဘင်များတွင် ပါဝင်ခြင်းနှင့် တစ်ဦးချင်း ပြုစုစောင့်ရှောက်မှု အကြံပြုခြင်း။',
+                        3: 'လုပ်ငန်းများ လုံးဝ မိမိကိုယ်တိုင် ဆောင်ရွက်နိုင်ပြီး အငယ်များကို ကူညီပေးကာ အဖွဲ့အစည်း ပူးပေါင်းဆောင်ရွက်မှုကို ဦးဆောင်ရန်။'
+                    },
+                    nurse_beginner: {
+                        1: 'ဂေဟာ၏ ပုံမှန် လုပ်ငန်းများကို နားလည်ပြီး နေထိုင်သူ တစ်ဦးစီ၏ မျက်နှာနှင့် ရောဂါများကို တွဲဆက်နားလည်ရန်။',
+                        2: 'နေထိုင်သူများ၏ "ပုံမှန်မဟုတ်သော အခြေအနေ" များကို သတိပြုမိပြီး နာစ့်အဖြစ် ဆုံးဖြတ်ချက် ချနိုင်ရန်။',
+                        3: 'ညဘက် အရေးပေါ် ဖုန်းခေါ်ဆိုမှုနှင့် အရေးပေါ် တုံ့ပြန်မှုများကို လေ့ကျင့်ပြီး မိမိကိုယ်တိုင် ဆောင်ရွက်နိုင်ရန်။'
+                    },
+                    nurse_experienced: {
+                        1: 'ဂေဟာ၏ သီးသန့် ပုံမှန် လုပ်ငန်းများနှင့် နေထိုင်သူများ၏ ပုံမှန် ကျန်းမာရေး အခြေအနေကို နားလည်ရန်။',
+                        2: 'ဂေဟာ၏ သီးသန့် ဆုံးဖြတ်ချက် စံနှုန်းများကို နားလည်ပြီး မိမိကိုယ်တိုင် တုံ့ပြန် ဆောင်ရွက်နိုင်ရန်။',
+                        3: 'အဖွဲ့အစည်း ပူးပေါင်းဆောင်ရွက်မှု၏ အဓိက ဖြစ်လာပြီး ဘဝ၏ နောက်ဆုံးအဆင့် ပြုစုစောင့်ရှောက်မှုတွင် ပါဝင်ရန်။'
+                    }
+                };
+
+                const getMonthTitle = (m) => {
+                    if (m === 4) {
+                        return t('month4Title');
+                    }
+                    if (currentLang.value === 'my' && currentStaff.value) {
+                        const key = currentStaff.value.courseKey;
+                        if (monthTitlesMY[key] && monthTitlesMY[key][m]) return monthTitlesMY[key][m];
+                    }
+                    return currentCurriculum.value.months[m]?.title || '';
+                };
+
+                const getMonthGoal = (m) => {
+                    if (m === 4) {
+                        return t('month4Goal');
+                    }
+                    if (currentLang.value === 'my' && currentStaff.value) {
+                        const key = currentStaff.value.courseKey;
+                        if (monthGoalsMY[key] && monthGoalsMY[key][m]) return monthGoalsMY[key][m];
+                    }
+                    return currentCurriculum.value.months[m]?.goal || '';
+                };
+
+                const getInterviewTiming = (m) => {
+                    if (m === 4) {
+                        return currentLang.value === 'my' ? '၄ လမြောက် တိုးချဲ့ တွေ့ဆုံဆွေးနွေးပွဲ' : '4ヶ月目 延長・補講面談';
+                    }
+                    if (currentLang.value === 'my') {
+                        if (m === 1) return 'ဒုတိယပတ်နှင့် လကုန်';
+                        if (m === 2) return 'လကုန်';
+                        if (m === 3) return '၃ လပြည့် သုံးသပ်ချက်';
+                    }
+                    return currentCurriculum.value.months[m]?.interview || '';
+                };
+
+                const getCurrentMonthInterviewDate = (m) => {
+                    if (!currentStaff.value || !currentStaff.value.interviewDates) return '未定';
+                    const dates = currentStaff.value.interviewDates;
+                    if (m === 1) return dates.m1 || addDays(currentStaff.value.startDate, 30);
+                    if (m === 2) return dates.m2 || addDays(currentStaff.value.startDate, 60);
+                    if (m === 3) return dates.m3 || addDays(currentStaff.value.startDate, 90);
+                    if (m === 4) return dates.m4 || addDays(currentStaff.value.startDate, 120);
+                    return '未定';
+                };
+
+                // Estimated Completion Date calculation
+                const estimatedCompletionDate = computed(() => {
+                    if (!currentStaff.value || !currentStaff.value.startDate) return '未算出';
+                    const baseDateStr = currentStaff.value.startDate;
+                    
+                    const baseFinish = addDays(baseDateStr, 90);
+                    const prog = calculateProgress('trainer');
+
+                    if (prog >= 100 && activeMonth.value === 3) {
+                        return `${baseFinish} (修了済み)`;
+                    }
+                    return `${baseFinish} 予定`;
+                });
+
+                const getCheckState = (itemId, type) => {
+                    const key = `${selectedStaffId.value}_${itemId}_${type}`;
+                    return !!checkStore.value[key];
+                };
+
+                const toggleCheck = (itemId, type) => {
+                    const key = `${selectedStaffId.value}_${itemId}_${type}`;
+                    checkStore.value[key] = !checkStore.value[key];
+                    autoSaveDebounce();
+                };
+
+                const toggleNeedsReview = (item) => {
+                    item.needsReview = !item.needsReview;
+                    autoSaveDebounce();
+                };
+
+                const calculateProgress = (type) => {
+                    const items = currentMonthItems.value;
+                    if (!items.length) return 0;
+                    let checked = 0;
+                    items.forEach(item => {
+                        if (getCheckState(item.id, type)) checked++;
+                    });
+                    return Math.round((checked / items.length) * 100);
+                };
+
+                const openGuideModal = (item) => {
+                    guideModalItem.value = item;
+                };
+
+                // Comment Submission Handlers (Split)
+                const addComment = (authorType, content) => {
+                    const now = new Date();
+                    const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                    
+                    commentsStore.value.unshift({
+                        id: Date.now(),
+                        staffId: selectedStaffId.value,
+                        authorType: authorType,
+                        content: content,
+                        date: dateStr
+                    });
+
+                    autoSaveDebounce();
+                };
+
+                const submitRookieComment = () => {
+                    if (!rookieCommentInput.value.trim()) return;
+                    addComment('新人本音', rookieCommentInput.value);
+                    rookieCommentInput.value = '';
+                    alert('新人コメントを保存しました。（※管理者専用画面でのみ安全に保存・集約されます）');
+                };
+
+                const submitTrainerComment = () => {
+                    if (!trainerCommentInput.value.trim()) return;
+                    addComment('指導者申送り', trainerCommentInput.value);
+                    trainerCommentInput.value = '';
+                    alert('指導者申し送りを保存しました。（※管理者専用画面でのみ安全に保存・集約されます）');
+                };
+
+                const deleteComment = (commentId) => {
+                    if (confirm('このコメントログを削除してもよろしいですか？')) {
+                        commentsStore.value = commentsStore.value.filter(c => c.id !== commentId);
+                        autoSaveDebounce();
+                    }
+                };
+
+                // Recalculate Interview Dates when Start Date Changes
+                const recalculateInterviewDates = () => {
+                    if (!editingStaff.value.startDate) return;
+                    const st = editingStaff.value.startDate;
+                    editingStaff.value.interviewDates = {
+                        w2: addDays(st, 14),
+                        m1: addDays(st, 30),
+                        m2: addDays(st, 60),
+                        m3: addDays(st, 90)
+                    };
+                };
+
+                // Staff Add/Edit Modal Handling
+                const openStaffModal = (staff) => {
+                    if (staff) {
+                        editingStaff.value = { 
+                            ...staff,
+                            interviewDates: { ...(staff.interviewDates || {}) }
+                        };
+                    } else {
+                        const today = new Date().toISOString().split('T')[0];
+                        editingStaff.value = {
+                            id: null,
+                            name: '',
+                            courseKey: 'care_beginner',
+                            workType: '正社員（早番・日勤・夜勤）',
+                            startDate: today,
+                            interviewDates: {
+                                w2: addDays(today, 14),
+                                m1: addDays(today, 30),
+                                m2: addDays(today, 60),
+                                m3: addDays(today, 90)
+                            }
+                        };
+                    }
+                    showStaffModal.value = true;
+                };
+
+                const saveStaff = () => {
+                    if (!editingStaff.value.name.trim()) {
+                        alert('お名前を入力してください。');
+                        return;
+                    }
+
+                    let role = '介護職';
+                    let courseName = '未経験者コース';
+                    if (editingStaff.value.courseKey.startsWith('nurse')) role = '看護師';
+                    if (editingStaff.value.courseKey.endsWith('experienced')) courseName = '経験者コース';
+
+                    if (editingStaff.value.id) {
+                        const index = staffList.value.findIndex(s => s.id === editingStaff.value.id);
+                        if (index !== -1) {
+                            staffList.value[index] = {
+                                ...editingStaff.value,
+                                role,
+                                courseName
+                            };
+                        }
+                    } else {
+                        const newId = Date.now();
+                        staffList.value.push({
+                            ...editingStaff.value,
+                            id: newId,
+                            role,
+                            courseName
+                        });
+                        selectedStaffId.value = newId;
+                    }
+
+                    showStaffModal.value = false;
+                    autoSaveDebounce();
+                };
+
+                const deleteStaff = (id) => {
+                    if (confirm('このスタッフ情報を削除してもよろしいですか？')) {
+                        staffList.value = staffList.value.filter(s => s.id !== id);
+                        if (selectedStaffId.value === id && staffList.value.length > 0) {
+                            selectedStaffId.value = staffList.value[0].id;
+                        }
+                        showStaffModal.value = false;
+                        autoSaveDebounce();
+                    }
+                };
+
+                return {
+                    isAdmin,
+                    showAdminAuthModal,
+                    adminPasscode,
+                    openAdminAuthModal,
+                    verifyAdminPasscode,
+                    showWorkflowModal,
+                    showConfigModal,
+                    gasUrlInput,
+                    saveGasUrl,
+                    saveStatus,
+                    isSaving,
+                    isLoading,
+                    lastSavedTime,
+                    saveDataToGAS,
+                    loadDataFromGAS,
+                    workflowTab,
+                    dayMode,
+                    guideModalItem,
+                    openGuideModal,
+                    showStaffModal,
+                    editingStaff,
+                    openStaffModal,
+                    recalculateInterviewDates,
+                    saveStaff,
+                    deleteStaff,
+                    selectedStaffId,
+                    staffList,
+                    currentStaff,
+                    activeMonth,
+                    currentCurriculum,
+                    currentMonthItems,
+                    availableMonths,
+                    getMonthTitle,
+                    getMonthGoal,
+                    getInterviewTiming,
+                    getCurrentMonthInterviewDate,
+                    estimatedCompletionDate,
+                    isItemExempt,
+                    getCheckState,
+                    toggleCheck,
+                    toggleNeedsReview,
+                    calculateProgress,
+                    rookieCommentInput,
+                    trainerCommentInput,
+                    staffRookieComments,
+                    staffTrainerComments,
+                    submitRookieComment,
+                    submitTrainerComment,
+                    deleteComment,
+                    staffComments,
+                    isEditingFocusTopic,
+                    tempFocusTopic,
+                    currentFocusTopic,
+                    startEditFocusTopic,
+                    saveFocusTopic,
+                    showAddCustomForm,
+                    newCustomTitle,
+                    newCustomDesc,
+                    addCustomItem,
+                    deleteCustomItem,
+                    itemNotesStore,
+                    editingNoteItemId,
+                    tempNoteText,
+                    getItemNote,
+                    updateItemNote,
+                    instructorScheduleStore,
+                    showInstructorScheduleModal,
+                    getTodayStr,
+                    getTodayInstructorName,
+                    setTodayInstructorName,
+                    getInstructorForDate,
+                    setInstructorForDate,
+                    openInstructorScheduleModal,
+                    getMonthDates,
+                    formattedToday,
+                    scheduleActiveMonth,
+                    isEditingTodayInstructor,
+                    updateFocusTopicForActiveMonth,
+                    currentLang,
+                    toggleLanguage,
+                    t,
+                    getItemTitle,
+                    getItemDesc,
+                    getItemGuide,
+                    translatingCommentId,
+                    translateComment
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
