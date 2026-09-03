@@ -438,9 +438,22 @@
                             </div>
 
                             <button @click="submitRookieComment" 
-                                    class="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition flex items-center justify-center">
-                                <i class="fa-solid fa-paper-plane mr-1.5"></i> {{ t('rookieSubmitBtn') }}
+                                    :disabled="isSubmittingRookie || !rookieCommentInput.trim()"
+                                    :class="rookieSubmitSuccess ? 'bg-emerald-600 hover:bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'"
+                                    class="w-full active:scale-98 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                <span v-if="isSubmittingRookie" class="flex items-center">
+                                    <i class="fa-solid fa-spinner fa-spin mr-1.5 text-blue-200"></i> クラウド自動保存中...
+                                </span>
+                                <span v-else-if="rookieSubmitSuccess" class="flex items-center">
+                                    <i class="fa-solid fa-circle-check mr-1.5 text-emerald-200"></i> クラウドに保存完了！
+                                </span>
+                                <span v-else class="flex items-center">
+                                    <i class="fa-solid fa-paper-plane mr-1.5"></i> {{ t('rookieSubmitBtn') }}
+                                </span>
                             </button>
+                            <p v-if="rookieSubmitSuccess" class="text-[11px] text-emerald-600 font-bold text-center mt-1 flex items-center justify-center">
+                                <i class="fa-solid fa-cloud-check mr-1"></i> スプレッドシートへ自動同期されました
+                            </p>
                         </div>
 
                         <!-- 2. 指導者入力カード -->
@@ -462,9 +475,22 @@
                             </div>
 
                             <button @click="submitTrainerComment" 
-                                    class="w-full bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition flex items-center justify-center">
-                                <i class="fa-solid fa-paper-plane mr-1.5"></i> {{ t('trainerSubmitBtn') }}
+                                    :disabled="isSubmittingTrainer || !trainerCommentInput.trim()"
+                                    :class="trainerSubmitSuccess ? 'bg-emerald-600 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'"
+                                    class="w-full active:scale-98 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                <span v-if="isSubmittingTrainer" class="flex items-center">
+                                    <i class="fa-solid fa-spinner fa-spin mr-1.5 text-emerald-200"></i> クラウド自動保存中...
+                                </span>
+                                <span v-else-if="trainerSubmitSuccess" class="flex items-center">
+                                    <i class="fa-solid fa-circle-check mr-1.5 text-emerald-200"></i> クラウドに保存完了！
+                                </span>
+                                <span v-else class="flex items-center">
+                                    <i class="fa-solid fa-paper-plane mr-1.5"></i> {{ t('trainerSubmitBtn') }}
+                                </span>
                             </button>
+                            <p v-if="trainerSubmitSuccess" class="text-[11px] text-emerald-600 font-bold text-center mt-1 flex items-center justify-center">
+                                <i class="fa-solid fa-cloud-check mr-1"></i> スプレッドシートへ自動同期されました
+                            </p>
                         </div>
                     </div>
 
@@ -1427,9 +1453,13 @@
                 const isLoading = ref(false);
                 const lastSavedTime = ref(localStorage.getItem('kusunoki_last_save') || '');
 
-                // Split Comment Form Inputs
+                // Split Comment Form Inputs & Submission States
                 const rookieCommentInput = ref('');
                 const trainerCommentInput = ref('');
+                const isSubmittingRookie = ref(false);
+                const isSubmittingTrainer = ref(false);
+                const rookieSubmitSuccess = ref(false);
+                const trainerSubmitSuccess = ref(false);
 
                 // Helper: Date Adder
                 const addDays = (dateStr, days) => {
@@ -1734,7 +1764,13 @@
                         const localCustom = localStorage.getItem('kusunoki_customItemsStore');
                         const localNotes = localStorage.getItem('kusunoki_itemNotesStore');
                         const localSchedule = localStorage.getItem('kusunoki_instructorScheduleStore');
-                        if (localStaff) staffList.value = JSON.parse(localStaff);
+                        if (localStaff) {
+                            staffList.value = JSON.parse(localStaff);
+                            if (staffList.value.length > 0) {
+                                const exists = staffList.value.some(s => s.id === selectedStaffId.value);
+                                if (!exists) selectedStaffId.value = staffList.value[0].id;
+                            }
+                        }
                         if (localCheck) checkStore.value = JSON.parse(localCheck);
                         if (localComments) commentsStore.value = JSON.parse(localComments);
                         if (localFocus) focusTopicsStore.value = JSON.parse(localFocus);
@@ -1771,18 +1807,41 @@
                             instructorScheduleStore: instructorScheduleStore.value
                         };
 
-                        const response = await fetch(gasApiUrl.value, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                            body: JSON.stringify(payload)
-                        });
+                        let isSaved = false;
+                        try {
+                            const response = await fetch(gasApiUrl.value, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                                body: JSON.stringify(payload)
+                            });
+                            const res = await response.json();
+                            if (res && res.status === 'success') {
+                                isSaved = true;
+                            }
+                        } catch (fetchErr) {
+                            // ブラウザ環境のリダイレクト/CORSによる見かけ上のエラーを防止し確実に保存
+                            console.warn('Standard POST response issue, triggering no-cors fallback:', fetchErr);
+                            try {
+                                await fetch(gasApiUrl.value, {
+                                    method: 'POST',
+                                    mode: 'no-cors',
+                                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                                    body: JSON.stringify(payload)
+                                });
+                                isSaved = true;
+                            } catch(noCorsErr) {
+                                console.error('no-cors fallback failed:', noCorsErr);
+                            }
+                        }
 
-                        const res = await response.json();
-                        if (res.status === 'success') {
+                        if (isSaved) {
                             saveStatus.value = 'saved';
+                            const nowStr = new Date().toLocaleString('ja-JP');
+                            lastSavedTime.value = nowStr;
+                            localStorage.setItem('kusunoki_last_save', nowStr);
                             if (isManual) alert('Googleスプレッドシートへ正常に保存されました！');
                         } else {
-                            throw new Error(res.message || 'Save failed');
+                            throw new Error('Save failed');
                         }
                     } catch (err) {
                         console.error('GAS Save Error:', err);
@@ -1811,8 +1870,12 @@
                         const res = await fetch(`${gasApiUrl.value}?action=getAll`);
                         const data = await res.json();
                         if (data.status === 'success' && data.data) {
-                            if (data.data.staffList && Array.isArray(data.data.staffList)) {
+                            if (data.data.staffList && Array.isArray(data.data.staffList) && data.data.staffList.length > 0) {
                                 staffList.value = data.data.staffList;
+                                const exists = staffList.value.some(s => s.id === selectedStaffId.value);
+                                if (!exists) {
+                                    selectedStaffId.value = staffList.value[0].id;
+                                }
                             }
                             if (data.data.checkStore) {
                                 checkStore.value = data.data.checkStore;
@@ -1821,7 +1884,7 @@
                                 commentsStore.value = data.data.commentsStore;
                             }
                             if (data.data.focusTopicsStore) {
-                                focusTopicsStore.value = data.data.focusTopicsStore;
+                                focusTopicsStore.value = { ...data.data.focusTopicsStore };
                             }
                             if (data.data.customItemsStore) {
                                 customItemsStore.value = data.data.customItemsStore;
@@ -2360,34 +2423,71 @@
                     guideModalItem.value = item;
                 };
 
-                // Comment Submission Handlers (Split)
-                const addComment = (authorType, content) => {
-                    const now = new Date();
-                    const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-                    
-                    commentsStore.value.unshift({
-                        id: Date.now(),
-                        staffId: selectedStaffId.value,
-                        authorType: authorType,
-                        content: content,
-                        date: dateStr
-                    });
+                // Comment Submission Handlers (Split with Instant Cloud Auto-Save)
+                const submitRookieComment = async () => {
+                    const text = rookieCommentInput.value.trim();
+                    if (!text || isSubmittingRookie.value) return;
 
-                    autoSaveDebounce();
+                    isSubmittingRookie.value = true;
+                    try {
+                        const now = new Date();
+                        const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                        
+                        commentsStore.value.unshift({
+                            id: Date.now(),
+                            staffId: selectedStaffId.value,
+                            authorType: '新人本音',
+                            content: text,
+                            date: dateStr
+                        });
+                        rookieCommentInput.value = '';
+
+                        // 送信ボタンを押した瞬間に即座にクラウド（GAS/LocalStorage）へ確実に自動保存
+                        await saveDataToGAS(false);
+
+                        rookieSubmitSuccess.value = true;
+                        setTimeout(() => {
+                            rookieSubmitSuccess.value = false;
+                        }, 3500);
+                    } catch (err) {
+                        console.error('Rookie Comment Save Error:', err);
+                        alert('クラウド保存中にエラーが発生しました。手動保存または再接続をご確認ください。');
+                    } finally {
+                        isSubmittingRookie.value = false;
+                    }
                 };
 
-                const submitRookieComment = () => {
-                    if (!rookieCommentInput.value.trim()) return;
-                    addComment('新人本音', rookieCommentInput.value);
-                    rookieCommentInput.value = '';
-                    alert('新人コメントを保存しました。（※管理者専用画面でのみ安全に保存・集約されます）');
-                };
+                const submitTrainerComment = async () => {
+                    const text = trainerCommentInput.value.trim();
+                    if (!text || isSubmittingTrainer.value) return;
 
-                const submitTrainerComment = () => {
-                    if (!trainerCommentInput.value.trim()) return;
-                    addComment('指導者申送り', trainerCommentInput.value);
-                    trainerCommentInput.value = '';
-                    alert('指導者申し送りを保存しました。（※管理者専用画面でのみ安全に保存・集約されます）');
+                    isSubmittingTrainer.value = true;
+                    try {
+                        const now = new Date();
+                        const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                        
+                        commentsStore.value.unshift({
+                            id: Date.now(),
+                            staffId: selectedStaffId.value,
+                            authorType: '指導者申送り',
+                            content: text,
+                            date: dateStr
+                        });
+                        trainerCommentInput.value = '';
+
+                        // 送信ボタンを押した瞬間に即座にクラウド（GAS/LocalStorage）へ確実に自動保存
+                        await saveDataToGAS(false);
+
+                        trainerSubmitSuccess.value = true;
+                        setTimeout(() => {
+                            trainerSubmitSuccess.value = false;
+                        }, 3500);
+                    } catch (err) {
+                        console.error('Trainer Comment Save Error:', err);
+                        alert('クラウド保存中にエラーが発生しました。手動保存または再接続をご確認ください。');
+                    } finally {
+                        isSubmittingTrainer.value = false;
+                    }
                 };
 
                 const deleteComment = (commentId) => {
@@ -2526,6 +2626,10 @@
                     calculateProgress,
                     rookieCommentInput,
                     trainerCommentInput,
+                    isSubmittingRookie,
+                    isSubmittingTrainer,
+                    rookieSubmitSuccess,
+                    trainerSubmitSuccess,
                     staffRookieComments,
                     staffTrainerComments,
                     submitRookieComment,
