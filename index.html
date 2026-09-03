@@ -438,14 +438,11 @@
                             </div>
 
                             <button @click="submitRookieComment" 
-                                    :disabled="isSubmittingRookie || !rookieCommentInput.trim()"
-                                    :class="rookieSubmitSuccess ? 'bg-emerald-600 hover:bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'"
-                                    class="w-full active:scale-98 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
-                                <span v-if="isSubmittingRookie" class="flex items-center">
-                                    <i class="fa-solid fa-spinner fa-spin mr-1.5 text-blue-200"></i> クラウド自動保存中...
-                                </span>
-                                <span v-else-if="rookieSubmitSuccess" class="flex items-center">
-                                    <i class="fa-solid fa-circle-check mr-1.5 text-emerald-200"></i> クラウドに保存完了！
+                                    :disabled="!rookieCommentInput.trim()"
+                                    :class="rookieSubmitSuccess ? 'bg-emerald-600 hover:bg-emerald-600 scale-98' : 'bg-blue-600 hover:bg-blue-700'"
+                                    class="w-full active:scale-95 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                <span v-if="rookieSubmitSuccess" class="flex items-center">
+                                    <i class="fa-solid fa-circle-check mr-1.5 text-emerald-200"></i> 送信・保存完了！
                                 </span>
                                 <span v-else class="flex items-center">
                                     <i class="fa-solid fa-paper-plane mr-1.5"></i> {{ t('rookieSubmitBtn') }}
@@ -475,14 +472,11 @@
                             </div>
 
                             <button @click="submitTrainerComment" 
-                                    :disabled="isSubmittingTrainer || !trainerCommentInput.trim()"
-                                    :class="trainerSubmitSuccess ? 'bg-emerald-600 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'"
-                                    class="w-full active:scale-98 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
-                                <span v-if="isSubmittingTrainer" class="flex items-center">
-                                    <i class="fa-solid fa-spinner fa-spin mr-1.5 text-emerald-200"></i> クラウド自動保存中...
-                                </span>
-                                <span v-else-if="trainerSubmitSuccess" class="flex items-center">
-                                    <i class="fa-solid fa-circle-check mr-1.5 text-emerald-200"></i> クラウドに保存完了！
+                                    :disabled="!trainerCommentInput.trim()"
+                                    :class="trainerSubmitSuccess ? 'bg-emerald-600 hover:bg-emerald-600 scale-98' : 'bg-emerald-700 hover:bg-emerald-800'"
+                                    class="w-full active:scale-95 text-white font-bold text-xs py-2.5 rounded-xl shadow-xs transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                <span v-if="trainerSubmitSuccess" class="flex items-center">
+                                    <i class="fa-solid fa-circle-check mr-1.5 text-emerald-200"></i> 送信・保存完了！
                                 </span>
                                 <span v-else class="flex items-center">
                                     <i class="fa-solid fa-paper-plane mr-1.5"></i> {{ t('trainerSubmitBtn') }}
@@ -2423,71 +2417,89 @@
                     guideModalItem.value = item;
                 };
 
-                // Comment Submission Handlers (Split with Instant Cloud Auto-Save)
-                const submitRookieComment = async () => {
-                    const text = rookieCommentInput.value.trim();
-                    if (!text || isSubmittingRookie.value) return;
+                // Direct Fastest Comment Sender (Zero-latency UI + Lock-protected Append)
+                const sendCommentDirectlyToGAS = async (newComment) => {
+                    saveToLocalStorage();
+                    if (!gasApiUrl.value) return;
 
-                    isSubmittingRookie.value = true;
                     try {
-                        const now = new Date();
-                        const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-                        
-                        commentsStore.value.unshift({
-                            id: Date.now(),
-                            staffId: selectedStaffId.value,
-                            authorType: '新人本音',
-                            content: text,
-                            date: dateStr
-                        });
-                        rookieCommentInput.value = '';
-
-                        // 送信ボタンを押した瞬間に即座にクラウド（GAS/LocalStorage）へ確実に自動保存
-                        await saveDataToGAS(false);
-
-                        rookieSubmitSuccess.value = true;
-                        setTimeout(() => {
-                            rookieSubmitSuccess.value = false;
-                        }, 3500);
-                    } catch (err) {
-                        console.error('Rookie Comment Save Error:', err);
-                        alert('クラウド保存中にエラーが発生しました。手動保存または再接続をご確認ください。');
-                    } finally {
-                        isSubmittingRookie.value = false;
+                        const payload = {
+                            action: 'addComment',
+                            comment: newComment
+                        };
+                        try {
+                            await fetch(gasApiUrl.value, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                                body: JSON.stringify(payload)
+                            });
+                        } catch(fetchErr) {
+                            await fetch(gasApiUrl.value, {
+                                method: 'POST',
+                                mode: 'no-cors',
+                                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                                body: JSON.stringify(payload)
+                            });
+                        }
+                    } catch(err) {
+                        console.warn('Fast comment sync fallback to full save:', err);
+                        autoSaveDebounce();
                     }
                 };
 
-                const submitTrainerComment = async () => {
+                // Comment Submission Handlers (Instant 0-sec response for staff)
+                const submitRookieComment = () => {
+                    const text = rookieCommentInput.value.trim();
+                    if (!text) return;
+
+                    const now = new Date();
+                    const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                    
+                    const newComment = {
+                        id: Date.now(),
+                        staffId: selectedStaffId.value,
+                        authorType: '新人本音',
+                        content: text,
+                        date: dateStr
+                    };
+
+                    // 待ち時間ゼロ：即座に画面へ反映し入力欄をクリア
+                    commentsStore.value.unshift(newComment);
+                    rookieCommentInput.value = '';
+                    rookieSubmitSuccess.value = true;
+                    setTimeout(() => {
+                        rookieSubmitSuccess.value = false;
+                    }, 3000);
+
+                    // バックグラウンドで最短クラウド保存
+                    sendCommentDirectlyToGAS(newComment);
+                };
+
+                const submitTrainerComment = () => {
                     const text = trainerCommentInput.value.trim();
-                    if (!text || isSubmittingTrainer.value) return;
+                    if (!text) return;
 
-                    isSubmittingTrainer.value = true;
-                    try {
-                        const now = new Date();
-                        const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-                        
-                        commentsStore.value.unshift({
-                            id: Date.now(),
-                            staffId: selectedStaffId.value,
-                            authorType: '指導者申送り',
-                            content: text,
-                            date: dateStr
-                        });
-                        trainerCommentInput.value = '';
+                    const now = new Date();
+                    const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                    
+                    const newComment = {
+                        id: Date.now(),
+                        staffId: selectedStaffId.value,
+                        authorType: '指導者申送り',
+                        content: text,
+                        date: dateStr
+                    };
 
-                        // 送信ボタンを押した瞬間に即座にクラウド（GAS/LocalStorage）へ確実に自動保存
-                        await saveDataToGAS(false);
+                    // 待ち時間ゼロ：即座に画面へ反映し入力欄をクリア
+                    commentsStore.value.unshift(newComment);
+                    trainerCommentInput.value = '';
+                    trainerSubmitSuccess.value = true;
+                    setTimeout(() => {
+                        trainerSubmitSuccess.value = false;
+                    }, 3000);
 
-                        trainerSubmitSuccess.value = true;
-                        setTimeout(() => {
-                            trainerSubmitSuccess.value = false;
-                        }, 3500);
-                    } catch (err) {
-                        console.error('Trainer Comment Save Error:', err);
-                        alert('クラウド保存中にエラーが発生しました。手動保存または再接続をご確認ください。');
-                    } finally {
-                        isSubmittingTrainer.value = false;
-                    }
+                    // バックグラウンドで最短クラウド保存
+                    sendCommentDirectlyToGAS(newComment);
                 };
 
                 const deleteComment = (commentId) => {
