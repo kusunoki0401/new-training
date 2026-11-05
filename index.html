@@ -107,6 +107,12 @@
                         <i class="fa-solid fa-gear text-amber-300 mr-1.5"></i> 設定
                     </button>
 
+                    <button @click="openPinModal" 
+                            class="bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center shadow-sm"
+                            title="管理者PINの変更">
+                        <i class="fa-solid fa-key text-amber-300 mr-1.5"></i> PIN変更
+                    </button>
+
                     <button @click="showWorkflowModal = true" 
                             class="bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center shadow-sm">
                         <i class="fa-solid fa-clipboard-list mr-1.5 text-amber-300"></i> {{ t('workflowBtn') }}
@@ -1104,6 +1110,39 @@
             </div>
         </div>
 
+        <!-- Admin PIN Change Modal -->
+        <div v-if="showPinModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 space-y-4 border border-slate-200">
+                <div class="flex justify-between items-center border-b pb-3">
+                    <h3 class="font-bold text-slate-800 text-base flex items-center">
+                        <i class="fa-solid fa-key text-emerald-600 mr-2"></i> 管理者PINの変更
+                    </h3>
+                    <button @click="showPinModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">現在のPIN（6桁）</label>
+                        <input type="password" inputmode="numeric" maxlength="6" autocomplete="off" v-model="pinForm.old" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 tracking-widest focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">新しいPIN（6桁の数字）</label>
+                        <input type="password" inputmode="numeric" maxlength="6" autocomplete="off" v-model="pinForm.next" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 tracking-widest focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-700 block mb-1">新しいPIN（確認）</label>
+                        <input type="password" inputmode="numeric" maxlength="6" autocomplete="off" v-model="pinForm.confirm" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 tracking-widest focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <p class="text-slate-500">※変更すると、他の端末の管理者ログインは解除されます。</p>
+                </div>
+                <div class="flex space-x-2 pt-2">
+                    <button @click="showPinModal = false" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl">キャンセル</button>
+                    <button @click="submitPinChange" :disabled="isChangingPin" class="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs">
+                        {{ isChangingPin ? '変更中…' : '変更する' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Instructor Schedule Config Modal -->
         <div v-if="showInstructorScheduleModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
             <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 space-y-4 border border-slate-200 max-h-[90vh] overflow-y-auto">
@@ -1613,6 +1652,52 @@
 
                 const adminToken = ref('');
                 const isVerifying = ref(false);
+
+                const showPinModal = ref(false);
+                const isChangingPin = ref(false);
+                const pinForm = ref({ old: '', next: '', confirm: '' });
+
+                const openPinModal = () => {
+                    pinForm.value = { old: '', next: '', confirm: '' };
+                    showPinModal.value = true;
+                };
+
+                const submitPinChange = async () => {
+                    if (isChangingPin.value) return;
+                    const f = pinForm.value;
+                    if (!/^\d{6}$/.test(f.old)) { alert('現在のPINは6桁の数字で入力してください。'); return; }
+                    if (!/^\d{6}$/.test(f.next)) { alert('新しいPINは6桁の数字で入力してください。'); return; }
+                    if (f.next !== f.confirm) { alert('新しいPIN（確認）が一致しません。'); return; }
+                    if (f.next === f.old) { alert('現在と同じPINは設定できません。'); return; }
+                    isChangingPin.value = true;
+                    try {
+                        const resp = await fetch(gasApiUrl.value, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify({ action: 'changePasscode', token: adminToken.value, oldPasscode: f.old, newPasscode: f.next })
+                        });
+                        const res = await resp.json();
+                        if (res && res.status === 'success' && res.token) {
+                            adminToken.value = res.token;
+                            showPinModal.value = false;
+                            pinForm.value = { old: '', next: '', confirm: '' };
+                            alert('PINを変更しました。次回のログインから新しいPINをご利用ください。');
+                        } else if (res && res.status === 'denied') {
+                            alert('現在のPINが正しくありません。');
+                        } else if (res && res.status === 'locked') {
+                            alert(res.message || '試行回数の上限に達しました。しばらくしてからお試しください。');
+                        } else if (res && res.status === 'unauthorized') {
+                            alert('管理者の認証が切れています。いったんログアウトして、再ログインしてください。');
+                        } else {
+                            alert((res && res.message) || 'PINの変更に失敗しました。');
+                        }
+                    } catch (err) {
+                        console.error('PIN change error:', err);
+                        alert('PINの変更に失敗しました。通信状況をご確認ください。');
+                    } finally {
+                        isChangingPin.value = false;
+                    }
+                };
 
                 const logoutAdmin = () => {
                     isAdmin.value = false;
@@ -2412,11 +2497,56 @@
                     return !!checkStore.value[key];
                 };
 
-                const toggleCheck = (itemId, type) => {
+                let pendingChecks = 0;
+                const toggleCheck = async (itemId, type) => {
                     const key = `${selectedStaffId.value}_${itemId}_${type}`;
-                    checkStore.value[key] = !checkStore.value[key];
-                    autoSaveDebounce();
+                    const prev = !!checkStore.value[key];
+                    const next = !prev;
+                    checkStore.value[key] = next;
+                    saveToLocalStorage();
+                    pendingChecks++;
+                    saveStatus.value = 'saving';
+                    try {
+                        const resp = await fetch(gasApiUrl.value, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify({ action: 'setCheck', key: key, value: next })
+                        });
+                        const res = await resp.json();
+                        if (!res || res.status !== 'success') throw new Error('setCheck failed');
+                        saveStatus.value = 'saved';
+                        const nowStr = new Date().toLocaleString('ja-JP');
+                        lastSavedTime.value = nowStr;
+                        localStorage.setItem('kusunoki_last_save', nowStr);
+                    } catch (err) {
+                        console.error('Check save error:', err);
+                        checkStore.value[key] = prev;
+                        saveToLocalStorage();
+                        saveStatus.value = 'error';
+                        alert('チェックの保存に失敗しました。通信状況をご確認のうえ、もう一度お試しください。');
+                    } finally {
+                        pendingChecks--;
+                    }
                 };
+
+                // 他の画面での更新を反映（60秒ごと。操作中・保存中は更新しない）
+                const refreshSharedData = async () => {
+                    if (document.visibilityState !== 'visible') return;
+                    if (pendingChecks > 0 || isSaving.value || saveStatus.value === 'unsaved') return;
+                    try {
+                        const res = await fetch(`${gasApiUrl.value}?action=getAll`);
+                        const data = await res.json();
+                        if (pendingChecks > 0 || isSaving.value || saveStatus.value === 'unsaved') return;
+                        if (data && data.status === 'success' && data.data) {
+                            if (data.data.checkStore) checkStore.value = data.data.checkStore;
+                            if (Array.isArray(data.data.commentsStore)) commentsStore.value = data.data.commentsStore;
+                            saveToLocalStorage();
+                        }
+                    } catch (err) {
+                        console.warn('Background refresh failed:', err);
+                    }
+                };
+                setInterval(refreshSharedData, 60000);
 
                 const toggleNeedsReview = (item) => {
                     item.needsReview = !item.needsReview;
@@ -2629,6 +2759,11 @@
                     openAdminAuthModal,
                     verifyAdminPasscode,
                     logoutAdmin,
+                    showPinModal,
+                    isChangingPin,
+                    pinForm,
+                    openPinModal,
+                    submitPinChange,
                     isVerifying,
                     showWorkflowModal,
                     showConfigModal,
