@@ -112,7 +112,7 @@
                         <i class="fa-solid fa-clipboard-list mr-1.5 text-amber-300"></i> {{ t('workflowBtn') }}
                     </button>
 
-                    <button @click="isAdmin = false" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center shadow-sm">
+                    <button @click="logoutAdmin" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center shadow-sm">
                         <i class="fa-solid fa-right-from-bracket mr-1.5"></i> {{ t('adminLogoutBtn') }}
                     </button>
                 </div>
@@ -510,7 +510,7 @@
                     <button @click="openStaffModal(null)" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs flex items-center">
                         <i class="fa-solid fa-user-plus mr-1.5"></i> 新規スタッフ登録
                     </button>
-                    <button @click="isAdmin = false" class="bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs flex items-center">
+                    <button @click="logoutAdmin" class="bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-xs flex items-center">
                         <i class="fa-solid fa-arrow-left mr-1.5"></i> 現場画面へ戻る
                     </button>
                 </div>
@@ -1412,15 +1412,6 @@
                             }
                         }
 
-                        if (!resultText) {
-                            const fallbackUrl = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(comment.content)}&langpair=my|ja`;
-                            const fbResp = await fetch(fallbackUrl);
-                            const fbData = await fbResp.json();
-                            if (fbData && fbData.responseData && fbData.responseData.translatedText) {
-                                resultText = fbData.responseData.translatedText;
-                            }
-                        }
-
                         if (resultText) {
                             comment.translatedContent = resultText;
                             autoSaveDebounce();
@@ -1620,19 +1611,47 @@
                     adminPasscode.value = '';
                 };
 
-                const verifyAdminPasscode = () => {
-                    if (adminPasscode.value === '147123') {
-                        isAdmin.value = true;
-                        showAdminAuthModal.value = false;
-                        adminPasscode.value = '';
-                        if (pendingModalToOpen.value === 'instructorSchedule') {
-                            scheduleActiveMonth.value = activeMonth.value;
-                            showInstructorScheduleModal.value = true;
-                            pendingModalToOpen.value = null;
+                const adminToken = ref('');
+                const isVerifying = ref(false);
+
+                const logoutAdmin = () => {
+                    isAdmin.value = false;
+                    adminToken.value = '';
+                };
+
+                const verifyAdminPasscode = async () => {
+                    if (isVerifying.value) return;
+                    isVerifying.value = true;
+                    try {
+                        const resp = await fetch(gasApiUrl.value, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify({ action: 'login', passcode: adminPasscode.value })
+                        });
+                        const res = await resp.json();
+                        if (res && res.status === 'success' && res.token) {
+                            adminToken.value = res.token;
+                            isAdmin.value = true;
+                            showAdminAuthModal.value = false;
+                            adminPasscode.value = '';
+                            if (pendingModalToOpen.value === 'instructorSchedule') {
+                                scheduleActiveMonth.value = activeMonth.value;
+                                showInstructorScheduleModal.value = true;
+                                pendingModalToOpen.value = null;
+                            }
+                        } else if (res && res.status === 'locked') {
+                            alert(res.message || '試行回数の上限に達しました。しばらくしてからお試しください。');
+                            adminPasscode.value = '';
+                        } else {
+                            alert('パスコードが正しくありません。');
+                            adminPasscode.value = '';
                         }
-                    } else {
-                        alert('パスコードが正しくありません。');
+                    } catch (err) {
+                        console.error('Admin login error:', err);
+                        alert('認証サーバーに接続できませんでした。通信状況をご確認ください。');
                         adminPasscode.value = '';
+                    } finally {
+                        isVerifying.value = false;
                     }
                 };
 
@@ -1790,8 +1809,11 @@
                     isSaving.value = true;
 
                     try {
+                        const saveId = Date.now() + '_' + Math.random().toString(36).slice(2, 8);
                         const payload = {
                             action: 'saveAll',
+                            saveId: saveId,
+                            token: adminToken.value || '',
                             staffList: staffList.value,
                             checkStore: checkStore.value,
                             commentsStore: commentsStore.value,
@@ -1813,18 +1835,16 @@
                                 isSaved = true;
                             }
                         } catch (fetchErr) {
-                            // ブラウザ環境のリダイレクト/CORSによる見かけ上のエラーを防止し確実に保存
-                            console.warn('Standard POST response issue, triggering no-cors fallback:', fetchErr);
+                            // 応答が読めない場合でも、サーバーに届いたかを保存IDで実際に確認する
+                            console.warn('Save response unreadable, verifying on server:', fetchErr);
                             try {
-                                await fetch(gasApiUrl.value, {
-                                    method: 'POST',
-                                    mode: 'no-cors',
-                                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                                    body: JSON.stringify(payload)
-                                });
-                                isSaved = true;
-                            } catch(noCorsErr) {
-                                console.error('no-cors fallback failed:', noCorsErr);
+                                const chk = await fetch(`${gasApiUrl.value}?action=getAll`);
+                                const chkData = await chk.json();
+                                if (chkData && chkData.data && chkData.data.lastSaveId === saveId) {
+                                    isSaved = true;
+                                }
+                            } catch (verifyErr) {
+                                console.error('Save verification failed:', verifyErr);
                             }
                         }
 
@@ -2427,20 +2447,13 @@
                             action: 'addComment',
                             comment: newComment
                         };
-                        try {
-                            await fetch(gasApiUrl.value, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                                body: JSON.stringify(payload)
-                            });
-                        } catch(fetchErr) {
-                            await fetch(gasApiUrl.value, {
-                                method: 'POST',
-                                mode: 'no-cors',
-                                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                                body: JSON.stringify(payload)
-                            });
-                        }
+                        const resp = await fetch(gasApiUrl.value, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify(payload)
+                        });
+                        const res = await resp.json();
+                        if (!res || res.status !== 'success') throw new Error('addComment failed');
                     } catch(err) {
                         console.warn('Fast comment sync fallback to full save:', err);
                         autoSaveDebounce();
@@ -2502,10 +2515,26 @@
                     sendCommentDirectlyToGAS(newComment);
                 };
 
-                const deleteComment = (commentId) => {
-                    if (confirm('このコメントログを削除してもよろしいですか？')) {
+                const deleteComment = async (commentId) => {
+                    if (!confirm('このコメントログを削除してもよろしいですか？')) return;
+                    try {
+                        const resp = await fetch(gasApiUrl.value, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify({ action: 'deleteComment', commentId: commentId, token: adminToken.value })
+                        });
+                        const res = await resp.json();
+                        if (!res || res.status !== 'success') {
+                            alert(res && res.status === 'unauthorized'
+                                ? '管理者の認証が切れています。再ログインしてください。'
+                                : 'コメントの削除に失敗しました。');
+                            return;
+                        }
                         commentsStore.value = commentsStore.value.filter(c => c.id !== commentId);
-                        autoSaveDebounce();
+                        saveToLocalStorage();
+                    } catch (err) {
+                        console.error('Delete comment error:', err);
+                        alert('コメントの削除に失敗しました。通信状況をご確認ください。');
                     }
                 };
 
@@ -2599,6 +2628,8 @@
                     adminPasscode,
                     openAdminAuthModal,
                     verifyAdminPasscode,
+                    logoutAdmin,
+                    isVerifying,
                     showWorkflowModal,
                     showConfigModal,
                     gasUrlInput,
